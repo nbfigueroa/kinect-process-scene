@@ -1,0 +1,35 @@
+<?xml version="1.0" ?>
+<launch>
+  <node name="tableDetectorOnLASA" pkg="lasa_perception_module" type="tableDetectorOnLASA" output="screen" respawn="false">
+    
+    <!-- Params On LASA -->
+    <param name="camera_name" value="/kinect2"/> 
+    <param name="world_frame_name" value="/world_frame"/>
+    <param name="depth_cutoff" value="1.7"/> 
+    <param name="camera_away" value="y"/>
+    <param name="use_base_for_z" value="true"/>
+    <param name="plane_threshold" value="0.02"/> 
+    <param name="outward_direction" value="-x"/>
+    <param name="roller_direction" value="-y"/>    
+
+    <!-- Params On Boxy -->
+    <!--param name="camera_name" value="/shoulder_kinect"/  
+    <param name="camera_name" value="/kinect2_head"/> 
+    <param name="world_frame_name" value="/base_link"/>    
+    <param name="depth_cutoff" value="1.5"/> 
+    <param name="camera_away" value="-y"/>
+    <param name="use_base_for_z" value="true"/>
+    <param name="plane_threshold" value="0.1"/> 
+    <param name="outward_direction" value="x"/>
+    <param name="roller_direction" value="x"/> -->
+ 
+    <param name="output_point_cloud" value="/table"/>
+    <param name="dough_pose_srv_name" value="/dough_Pose"/>
+    <param name="dough_frame" value="/dough_frame"/>
+    <param name="dough_attractor" value="/dough_attractor"/>
+
+    <param name="x_offset" value="0.0"/>
+    <param name="y_offset" value="0.0"/>
+
+  </node>
+</launch>

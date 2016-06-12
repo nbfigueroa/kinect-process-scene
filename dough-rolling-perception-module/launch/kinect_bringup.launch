@@ -1,0 +1,4 @@
+<launch>
+  <include file="$(find openni_launch)/launch/openni.launch"/>
+  <node pkg="image_view" type="image_view" name="image_view"  args="image:=/camera/rgb/image_rect_color" output="log" />
+</launch>

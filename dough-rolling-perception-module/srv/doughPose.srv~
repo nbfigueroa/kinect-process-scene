@@ -1,0 +1,5 @@
+sensor_msgs/JointState Table_image
+---
+int32[] dough_center
+int32[] dough_D1
+int32[] dough_D2
