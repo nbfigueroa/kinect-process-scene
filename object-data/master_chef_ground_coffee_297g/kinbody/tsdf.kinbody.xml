@@ -1,0 +1,8 @@
+<KinBody name="master_chef_ground_coffee_297g">
+  <Body type="static" name="master_chef_ground_coffee_297g">
+    <Geom type="trimesh">
+      <Render>../meshes/tsdf_mesh.stl</Render>
+      <Data>../meshes/tsdf_mesh.stl</Data>
+    </Geom>
+  </Body>
+</KinBody>

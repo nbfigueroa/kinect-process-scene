@@ -1,0 +1,8 @@
+<KinBody name="cheeze-it_388g">
+  <Body type="static" name="cheeze-it_388g">
+    <Geom type="trimesh">
+      <Render>../meshes/tsdf_mesh.stl</Render>
+      <Data>../meshes/tsdf_mesh.stl</Data>
+    </Geom>
+  </Body>
+</KinBody>
