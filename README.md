@@ -29,4 +29,4 @@ $ rosrun kuka_fri_bridge run_lwr.sh
 #####To visualize real kinect images + joint data:
 ######Launch rviz
 ```
-$ roslaunch kuka_lwr_bringup lwr2_alone_realtime.launch robot_urdf_name:=kuka_grav_comp.xacro
+$ roslaunch kuka_lwr_bringup lwr2_tabletop.launch robot_urdf_name:=kuka_grav_comp.xacro
