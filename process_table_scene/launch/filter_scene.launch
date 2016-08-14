@@ -1,26 +1,16 @@
 <?xml version="1.0" ?>
 <launch>
 
-  <!-- Set Default parameters-->
-    <arg name="input-cloud-name"                 default="/camera/depth_registered/points"/> 
-    <arg name="output-cloud-name"                default="/scene/table"/> 
-    <arg name="x_min"                            default="-1.2"/>
-    <arg name="x_max"                            default="1"/> 
-    <arg name="y_min"                            default="-1"/>
-    <arg name="y_max"                            default="1"/> 
-    <arg name="z_min"                            default="0.95"/> 
-    <arg name="z_max"                            default="1.6"/>
-    
+  <!-- Name of  filter_config_file:=/path/to/config.yaml to change options. -->
+  <arg name="filter_config_file" 
+    default="$(find process_table_scene)/config/tabletop_k2.yaml" />
 
-    <node name="filter_scene" pkg="process_table_scene" type="filter_scene" output="screen" respawn="false">
-        <param name="input_cloud"           value="$(arg input-cloud-name)"/> 
-        <param name="output_cloud"          value="$(arg output-cloud-name)"/> 
-        <param name="x_min"                 value="$(arg x_min)"/>
-        <param name="x_max"                 value="$(arg x_max)"/>         
-        <param name="y_min"                 value="$(arg y_min)"/>
-        <param name="y_max"                 value="$(arg y_max)"/> 
-        <param name="z_min"                 value="$(arg z_min)"/>
-        <param name="z_max"                 value="$(arg z_max)"/>         
-    </node>
+  <node name="filter_scene" 
+        pkg="process_table_scene" 
+        type="filter_scene" 
+        output="screen" 
+        respawn="false"> 
+  <rosparam file="$(arg filter_config_file)" command="load" />        
+  </node>
 
 </launch>

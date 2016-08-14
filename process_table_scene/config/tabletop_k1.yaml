@@ -1,0 +1,17 @@
+#
+# Definition of all input parameters for the filter
+#
+
+input_cloud:                 '/camera/depth_registered/points'
+output_cloud:               '/scene/table'
+camera_frame_name:           '/camera_rgb_optical_frame'
+x_min:                       -0.4
+x_max:                       0.3 
+y_min:                       -0.1
+y_max:                       0.5
+z_min:                       1.05
+z_max:                       1.56
+out_mean:                    10
+out_std:                     1
+stat_mean:                   10
+stat_std:                    1

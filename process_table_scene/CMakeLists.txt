@@ -9,12 +9,15 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   roscpp
   sensor_msgs
+  tf
+  tf_conversions
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(Boost REQUIRED COMPONENTS system)
+find_package(PCL 1.7  REQUIRED)
 
-
+add_definitions(${PCL_DEFINITIONS})
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
@@ -115,7 +118,9 @@ catkin_package(
 ## Your package locations should be listed before other locations
 # include_directories(include)
 include_directories(
+  include
   ${catkin_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -130,13 +135,16 @@ include_directories(
 
 ## Declare a C++ executable
 add_executable(filter_scene src/filter_scene.cpp)
+#add_executable(cluster_tabletop src/cluster_tabletop.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(process_table_scene_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+link_directories(${PCL_LIBRARY_DIRS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(filter_scene ${catkin_LIBRARIES})
+target_link_libraries(filter_scene ${catkin_LIBRARIES} ${PCL_LIBRARIES} libpcl_kdtree.so libvtkCommon.so libvtkFiltering.so )
+#target_link_libraries(cluster_tabletop ${catkin_LIBRARIES})
 
 #############
 ## Install ##
