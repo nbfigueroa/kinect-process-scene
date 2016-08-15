@@ -2,14 +2,21 @@
 # Definition of all input parameters for the filter
 #
 input_cloud:                 '/kinect2/sd/points'
-output_cloud:                '/scene/table'
+table_cloud:                 '/scene/table'
+object_cloud:                '/scene/zucchini'
 camera_frame_name:           '/kinect2_rgb_optical_frame'
+world_frame:                 '/world_frame'
+arm_frame:                   '/right_arm_flange_link'
 x_min:                        -0.4
 x_max:                        0.31 
 y_min:                        -0.43
 y_max:                        0.25
-z_min:                        0.6
+z_min:                        0.5
 z_max:                        1.3
-stat_mean:                    10
+stat_mean:                    0
 stat_std:                     0.5
 pcl_viz:                      false
+pub_rviz:                     true
+table_fixed:                  true
+write_pcd:                    false
+pcd_write_dir:               '/home/nbfigueroa/Dropbox/Demonstrator_Year4/Zucchini-tests/'
