@@ -19,6 +19,8 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/project_inliers.h>
 #include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/segmentation/region_growing.h>
+#include <pcl/segmentation/extract_clusters.h>
 
 // Visualization Shit
 #include <pcl/io/io.h>
@@ -330,9 +332,16 @@ const std::string currentDateTime() {
     return buf;
 }
 
+void cloud_processing (){
+
+}
+
+
 ///-- PointCloud Callback ---//
 void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
 
+
+    /// --- Data containers for Point Cloud Processing -- ///
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>(*cloud_in));
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr table_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -381,7 +390,6 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     ///
     applyPassThroughFilter(input_cloud_ptr , filtered_cloud_ptr,x_min, x_max, y_min, y_max, z_min, z_max);
 
-
     /// --- Removing Outliers in Scene --- ///
     /// \brief If desired, filtering out
     /// noisy points.
@@ -398,7 +406,7 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     /// \brief We begin by trasforming the cloud to the base RF
     /// then we either extract the table from fixed parameters
     /// i.e. (table_fixed=true) or with Bounding Box from minmax values
-    ///
+    /// -- only do this if table topic name is given
     pcl::transformPointCloud (*filtered_cloud_ptr, *filtered_cloud_ptr, b2k_eig);
     pcl::PointXYZRGB tab_minPt, tab_maxPt;
     tab_maxPt.x = -0.182856; tab_maxPt.y = -0.155587; tab_maxPt.z = 0.035;
@@ -406,8 +414,11 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     if (!table_fixed){
         //-- Get Bounding Boxes of Table Setting --//
         pcl::getMinMax3D (*filtered_cloud_ptr, tab_minPt, tab_maxPt);}
-    removeAxisAlignedBB(filtered_cloud_ptr, table_cloud_ptr, tab_minPt, tab_maxPt, false);
-
+    if (table_cloud != ""){
+        removeAxisAlignedBB(filtered_cloud_ptr, table_cloud_ptr, tab_minPt, tab_maxPt, false);
+        std::vector<int> indices_tab;
+        pcl::removeNaNFromPointCloud(*table_cloud_ptr,*table_cloud_ptr, indices_tab);
+    }
 
     /// --- Create Zucchini Pointcloud and Extract Bounding Box with PCA --- ///
     /// \brief Extract the remaining points ~sans the table. Then we transform
@@ -421,14 +432,111 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     pcl::transformPointCloud(*object_cloud_ptr,*object_cloud_ptr, arm);
     removeAxisAlignedBB(object_cloud_ptr, obj_minPt, obj_maxPt, false);
 
-    /// -- Do some filtering to get a consistent surface -- //
-    /// \input  object_cloud_ptr
-    /// \output object_cloud_ptr
-    ///...
-
 
     ///-- Transform Object back to Robot Base RF --///
     pcl::transformPointCloud(*object_cloud_ptr,*object_cloud_ptr, arm_back);
+    std::vector<int> indices_obj;
+    pcl::removeNaNFromPointCloud(*object_cloud_ptr,*object_cloud_ptr, indices_obj);
+
+
+    ///-- Calculate surface normals of Object (Zucchini) --//
+    /// \brief We compute this in order to help feature tracking
+    /// and reconstruction functions.
+    ///
+    pcl::PointCloud<pcl::Normal>::Ptr object_normals_ptr (new pcl::PointCloud<pcl::Normal>);
+    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimator;
+    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr treeNormals(new pcl::search::KdTree<pcl::PointXYZRGB>());
+    normalEstimator.setInputCloud(object_cloud_ptr);
+    normalEstimator.setSearchMethod(treeNormals);
+    normalEstimator.setRadiusSearch (norm_rad);
+    Eigen::Vector4f xyz_centroid;
+    compute3DCentroid (*object_cloud_ptr, xyz_centroid);
+    normalEstimator.setViewPoint(xyz_centroid[0],xyz_centroid[1],xyz_centroid[2]+0.3);
+    normalEstimator.compute(*object_normals_ptr);
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr final_object_ptr (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    pcl::concatenateFields (*object_cloud_ptr, *object_normals_ptr, *final_object_ptr);
+
+
+    /// -- Apply Region Growing and Euclidean Distance Filter to Find the
+    /// Smooth Continuous Surface of the Zucchini -- //
+    /// \input  object_cloud_ptr
+    /// \output object_cloud_ptr
+    ///...
+    ///
+    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud;
+    if (object_cloud_ptr->points.size() > 200){
+
+
+        /// -- Check for point-to-point Euclidean Distances -- ///
+        pcl::search::KdTree<pcl::PointXYZRGBNormal>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBNormal>);
+        tree->setInputCloud (final_object_ptr);
+        std::vector<pcl::PointIndices> cluster_indices;
+        pcl::EuclideanClusterExtraction<pcl::PointXYZRGBNormal> ec;
+        ec.setInputCloud (final_object_ptr);
+        ec.setClusterTolerance (0.01); // 1cm
+        ec.setMinClusterSize (100);
+        ec.setMaxClusterSize (25000);
+        ec.extract (cluster_indices);
+
+        /// -- Extract Largest Cluster (TODO: Make Function) -- //
+        int max_cluster = 0;
+        int max_cluster_size = 0;
+        for (int i = 0; i<cluster_indices.size();i++){
+            if (cluster_indices[i].indices.size() > max_cluster_size){
+                max_cluster = i;
+                max_cluster_size = cluster_indices[i].indices.size();
+            }
+        }
+
+        /// -- Extract Euclidean Clustering Inliers -- ///
+        pcl::PointIndicesPtr ec_inliers (new pcl::PointIndices());
+        for (uint i=0;i<cluster_indices[max_cluster].indices.size ();i++)
+            ec_inliers->indices.push_back(cluster_indices[max_cluster].indices.at(i));
+
+
+        /// -- Check for Smooth Consisten Surface with Normal-based Region Growing -- ///
+        pcl::RegionGrowing<pcl::PointXYZRGB, pcl::Normal> reg;
+        std::vector <pcl::PointIndices> clusters;
+        reg.setMinClusterSize (100);
+        reg.setMaxClusterSize (object_cloud_ptr->points.size());
+        reg.setSearchMethod (treeNormals);
+        reg.setNumberOfNeighbours (10);
+        reg.setInputCloud (object_cloud_ptr);
+        reg.setIndices(ec_inliers);
+        reg.setInputNormals (object_normals_ptr);
+        reg.setSmoothnessThreshold (7.0 / 180.0 * M_PI);
+        reg.setCurvatureThreshold (0.5);
+        reg.extract (clusters);
+
+        /// -- Extract Largest Cluster (TODO: Make Function) -- //
+        max_cluster = 0;
+        max_cluster_size = 0;
+        for (int i = 0; i<clusters.size();i++){
+            if (clusters[i].indices.size() > max_cluster_size){
+                max_cluster = i;
+                max_cluster_size = clusters[i].indices.size();
+            }
+        }
+        colored_cloud = reg.getColoredCloud ();
+
+        /// -- Extract Region Growing Inliers -- ///
+        pcl::PointIndicesPtr rg_inliers (new pcl::PointIndices());
+        for (uint i=0;i<clusters[max_cluster].indices.size ();i++)
+            rg_inliers->indices.push_back(clusters[max_cluster].indices.at(i));
+
+        /// -- Create the filtering object -- ///
+        pcl::ExtractIndices<pcl::PointXYZRGBNormal> extract;
+        /// -- Extract the inliers -- //
+        extract.setIndices (rg_inliers);
+        extract.setNegative (false);
+        extract.filterDirectly(final_object_ptr);
+        std::vector<int> indices_filt;
+        pcl::removeNaNFromPointCloud(*final_object_ptr,*final_object_ptr, indices_filt);
+    }
+    else{
+         colored_cloud = object_cloud_ptr;
+    }
+
 
     /// --- Compute principal directions of the Zucchini --- ///
     /// \brief Compute centroid and PCA to get the enclosing
@@ -465,23 +573,6 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     const Eigen::Vector3f bb_Transform = eigenVectorsPCA * meanDiagonal + pcaCentroid.head<3>();
 
 
-    ///-- Calculate surface normals of Object (Zucchini) --//
-    /// \brief We compute this in order to help feature tracking
-    /// and reconstruction functions.
-    ///
-    pcl::PointCloud<pcl::Normal>::Ptr object_normals_ptr (new pcl::PointCloud<pcl::Normal>);
-    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimator;
-    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr treeNormals(new pcl::search::KdTree<pcl::PointXYZRGB>());
-    normalEstimator.setInputCloud(object_cloud_ptr);
-    normalEstimator.setSearchMethod(treeNormals);
-    normalEstimator.setRadiusSearch (norm_rad);
-    Eigen::Vector4f xyz_centroid;
-    compute3DCentroid (*object_cloud_ptr, xyz_centroid);
-    normalEstimator.setViewPoint(xyz_centroid[0],xyz_centroid[1],xyz_centroid[2]+0.3);
-    normalEstimator.compute(*object_normals_ptr);
-    pcl::PointCloud<pcl::PointXYZRGBNormal> final_object_normals;
-    pcl::concatenateFields (*object_cloud_ptr, *object_normals_ptr, final_object_normals);
-
     ///-- PCL Visualization -- ///
     /// \brief If true visualize clouds
     /// bounding boxes and normals in
@@ -491,15 +582,17 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         string table ("table_top"), object ("zucch") ;
 
         /// -- Visualize Table Pointcloud -- ///
-        updateVis(visor, table_cloud_ptr, table);
+        if (table_cloud != "")
+            updateVis(visor, table_cloud_ptr, table);
         visor->removeShape(table);
         visor->addCube(tab_minPt.x,tab_maxPt.x,tab_minPt.y,tab_maxPt.y,tab_minPt.z,tab_maxPt.z,1,1,1,table);
 
+
         /// -- Visualize Object Pointcloud -- ///
-        updateVis(visor, object_cloud_ptr,object);
+        updateVis(visor,colored_cloud, object);
         visor->removeShape(object);
         visor->addCube(bb_Transform, bb_Quat , bb_maxPoint.x - bb_minPoint.x, bb_maxPoint.y - bb_minPoint.y, bb_maxPoint.z - bb_minPoint.z, object);
-        updateVisNormals(visor, object_cloud_ptr,object_normals_ptr);
+        updateVisNormals(visor, object_cloud_ptr, object_normals_ptr);
     }
 
     /// -- Point Cloud Publishing -- ///
@@ -509,17 +602,19 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     ///
     if (pub_rviz){
 
-        ///-- Publish table point cloud --///
-        pcl::transformPointCloud(*table_cloud_ptr,*table_cloud_ptr,k2b_eig);
         pcl::PCLPointCloud2 output;
-        pcl::toPCLPointCloud2(*table_cloud_ptr,output);
-        pub1.publish (output);
+
+        ///-- Publish table point cloud --///
+        if (table_cloud != ""){
+            pcl::transformPointCloud(*table_cloud_ptr,*table_cloud_ptr,k2b_eig);
+            pcl::toPCLPointCloud2(*table_cloud_ptr,output);
+            pub1.publish (output);
+        }
 
         ///-- Publish object point cloud --///
-        pcl::transformPointCloudWithNormals(final_object_normals,final_object_normals,k2b_eig);
-        pcl::toPCLPointCloud2(final_object_normals,output);
+        pcl::transformPointCloudWithNormals(*final_object_ptr,*final_object_ptr,k2b_eig);
+        pcl::toPCLPointCloud2(*final_object_ptr,output);
         pub2.publish (output);
-
     }
 
     ///-- Write First Extract Point Cloud --///
@@ -530,7 +625,7 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
 
         string filename = pcd_write_dir + "zucchini-test-" + currentDateTime() + ".pcd";
         std::cout << "Wrote pcd file to :" << filename << std::endl;
-        pcl::io::savePCDFileASCII (filename, final_object_normals);
+        pcl::io::savePCDFileASCII (filename, *final_object_ptr);
         write_pcd = false;
     }
 
