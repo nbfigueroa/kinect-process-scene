@@ -55,7 +55,7 @@ double stat_mean(10) , stat_std(1);
 double norm_rad(0.03) ; //[m]
 
 ///-- Booleans to do stuff --///
-bool pcl_viz(0), pub_rviz(0), table_fixed(1), write_pcd(0);
+bool pcl_viz(0), pub_rviz(0), table_fixed(1), write_pcd(0), valid_object(0);
 
 ///-- Parameter Reader --///
 bool parseParams(const ros::NodeHandle& n) {
@@ -427,8 +427,8 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     ///
     removeAxisAlignedBB(filtered_cloud_ptr,object_cloud_ptr, tab_minPt, tab_maxPt, true);
     pcl::PointXYZRGB obj_minPt, obj_maxPt;
-    obj_minPt.x = -0.045; obj_minPt.y = -0.045; obj_minPt.z = 0.20;
-    obj_maxPt.x = 0.045;  obj_maxPt.y = 0.045;  obj_maxPt.z = 0.50;
+    obj_minPt.x = -0.06; obj_minPt.y = -0.06; obj_minPt.z = 0.18;
+    obj_maxPt.x = 0.06;  obj_maxPt.y = 0.06;  obj_maxPt.z = 0.4;
     pcl::transformPointCloud(*object_cloud_ptr,*object_cloud_ptr, arm);
     removeAxisAlignedBB(object_cloud_ptr, obj_minPt, obj_maxPt, false);
 
@@ -438,33 +438,34 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     std::vector<int> indices_obj;
     pcl::removeNaNFromPointCloud(*object_cloud_ptr,*object_cloud_ptr, indices_obj);
 
-
-    ///-- Calculate surface normals of Object (Zucchini) --//
-    /// \brief We compute this in order to help feature tracking
-    /// and reconstruction functions.
-    ///
-    pcl::PointCloud<pcl::Normal>::Ptr object_normals_ptr (new pcl::PointCloud<pcl::Normal>);
-    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimator;
-    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr treeNormals(new pcl::search::KdTree<pcl::PointXYZRGB>());
-    normalEstimator.setInputCloud(object_cloud_ptr);
-    normalEstimator.setSearchMethod(treeNormals);
-    normalEstimator.setRadiusSearch (norm_rad);
-    Eigen::Vector4f xyz_centroid;
-    compute3DCentroid (*object_cloud_ptr, xyz_centroid);
-    normalEstimator.setViewPoint(xyz_centroid[0],xyz_centroid[1],xyz_centroid[2]+0.3);
-    normalEstimator.compute(*object_normals_ptr);
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr final_object_ptr (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    pcl::concatenateFields (*object_cloud_ptr, *object_normals_ptr, *final_object_ptr);
-
+    std::cout << "Original Points Extracted: " << object_cloud_ptr->points.size() << std::endl;
 
     /// -- Apply Region Growing and Euclidean Distance Filter to Find the
     /// Smooth Continuous Surface of the Zucchini -- //
     /// \input  object_cloud_ptr
     /// \output object_cloud_ptr
-    ///...
     ///
-    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud;
-    if (object_cloud_ptr->points.size() > 200){
+    pcl::PointCloud<pcl::Normal>::Ptr object_normals_ptr (new pcl::PointCloud<pcl::Normal>);
+    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr final_object_ptr (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+
+    if (object_cloud_ptr->points.size() > 100){
+
+        ///-- Calculate surface normals of Object (Zucchini) --//
+        /// \brief We compute this in order to help feature tracking
+        /// and reconstruction functions.
+        ///
+        pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimator;
+        pcl::search::KdTree<pcl::PointXYZRGB>::Ptr treeNormals(new pcl::search::KdTree<pcl::PointXYZRGB>());
+        normalEstimator.setInputCloud(object_cloud_ptr);
+        normalEstimator.setSearchMethod(treeNormals);
+        normalEstimator.setRadiusSearch (norm_rad);
+        Eigen::Vector4f xyz_centroid;
+        compute3DCentroid (*object_cloud_ptr, xyz_centroid);
+        normalEstimator.setViewPoint(xyz_centroid[0],xyz_centroid[1],xyz_centroid[2]+0.3);
+        normalEstimator.compute(*object_normals_ptr);
+        pcl::concatenateFields (*object_cloud_ptr, *object_normals_ptr, *final_object_ptr);
+
 
 
         /// -- Check for point-to-point Euclidean Distances -- ///
@@ -473,7 +474,7 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         std::vector<pcl::PointIndices> cluster_indices;
         pcl::EuclideanClusterExtraction<pcl::PointXYZRGBNormal> ec;
         ec.setInputCloud (final_object_ptr);
-        ec.setClusterTolerance (0.01); // 1cm
+        ec.setClusterTolerance (0.015); // 1cm
         ec.setMinClusterSize (100);
         ec.setMaxClusterSize (25000);
         ec.extract (cluster_indices);
@@ -504,7 +505,7 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         reg.setInputCloud (object_cloud_ptr);
         reg.setIndices(ec_inliers);
         reg.setInputNormals (object_normals_ptr);
-        reg.setSmoothnessThreshold (7.0 / 180.0 * M_PI);
+        reg.setSmoothnessThreshold (10.0 / 180.0 * M_PI);
         reg.setCurvatureThreshold (0.5);
         reg.extract (clusters);
 
@@ -532,9 +533,12 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         extract.filterDirectly(final_object_ptr);
         std::vector<int> indices_filt;
         pcl::removeNaNFromPointCloud(*final_object_ptr,*final_object_ptr, indices_filt);
+        std::cout << "Final Points Extracted: " << final_object_ptr->points.size() << std::endl;
+        valid_object = true;
     }
     else{
          colored_cloud = object_cloud_ptr;
+         valid_object = false;
     }
 
 
@@ -592,7 +596,8 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         updateVis(visor,colored_cloud, object);
         visor->removeShape(object);
         visor->addCube(bb_Transform, bb_Quat , bb_maxPoint.x - bb_minPoint.x, bb_maxPoint.y - bb_minPoint.y, bb_maxPoint.z - bb_minPoint.z, object);
-        updateVisNormals(visor, object_cloud_ptr, object_normals_ptr);
+        if (valid_object)
+            updateVisNormals(visor, object_cloud_ptr, object_normals_ptr);
     }
 
     /// -- Point Cloud Publishing -- ///
@@ -612,7 +617,7 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         }
 
         ///-- Publish object point cloud --///
-        pcl::transformPointCloudWithNormals(*final_object_ptr,*final_object_ptr,k2b_eig);
+        pcl::transformPointCloudWithNormals(*final_object_ptr,*final_object_ptr,k2b_eig);        
         pcl::toPCLPointCloud2(*final_object_ptr,output);
         pub2.publish (output);
     }

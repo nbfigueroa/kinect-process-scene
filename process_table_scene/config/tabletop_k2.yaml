@@ -20,5 +20,5 @@ pcl_viz:                      true
 pub_rviz:                     true
 table_fixed:                  true
 # To write the first as cloud as a PCD file
-write_pcd:                    true
+write_pcd:                    false
 pcd_write_dir:               '/home/nbfigueroa/Dropbox/Demonstrator_Year4/Zucchini-tests/'
