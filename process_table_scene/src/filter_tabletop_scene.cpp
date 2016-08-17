@@ -55,7 +55,7 @@ double stat_mean(10) , stat_std(1);
 double norm_rad(0.03) ; //[m]
 
 ///-- Booleans to do stuff --///
-bool pcl_viz(0), pub_rviz(0), table_fixed(1), write_pcd(0), valid_object(0);
+bool pcl_viz(0), pub_rviz(0), table_fixed(1), write_pcd(0), valid_object(0), cutting_board(0);
 
 ///-- Parameter Reader --///
 bool parseParams(const ros::NodeHandle& n) {
@@ -163,6 +163,13 @@ bool parseParams(const ros::NodeHandle& n) {
         ret = false;
     } else {
         ROS_INFO_STREAM("table_fixed: "<< table_fixed);
+    }
+
+    if(!n.getParam("cutting_board", cutting_board)) {
+        ROS_ERROR("Must provide bool to segment and estimate cutting board tf!");
+        ret = false;
+    } else {
+        ROS_INFO_STREAM("cutting_board: "<< cutting_board);
     }
 
     if(!n.getParam("pcl_viz", pcl_viz)) {
@@ -325,10 +332,7 @@ const std::string currentDateTime() {
     struct tm  tstruct;
     char       buf[80];
     tstruct = *localtime(&now);
-    // Visit http://en.cppreference.com/w/cpp/chrono/c/strftime
-    // for more information about date/time format
     strftime(buf, sizeof(buf), "%Y-%m-%d.%X", &tstruct);
-
     return buf;
 }
 
@@ -409,15 +413,32 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     /// -- only do this if table topic name is given
     pcl::transformPointCloud (*filtered_cloud_ptr, *filtered_cloud_ptr, b2k_eig);
     pcl::PointXYZRGB tab_minPt, tab_maxPt;
-    tab_maxPt.x = -0.182856; tab_maxPt.y = -0.155587; tab_maxPt.z = 0.035;
-    tab_minPt.x = -0.752339; tab_minPt.y = -0.879793; tab_minPt.z = -0.01;
+    if (cutting_board){// Params for Cutting Board
+        tab_maxPt.x = -0.402856; tab_maxPt.y = -0.355587; tab_maxPt.z = 0.035;
+        tab_minPt.x = -0.612339; tab_minPt.y = -0.659793; tab_minPt.z = -0.01;
+
+    }
+    else{              // Params for Big Table
+        tab_maxPt.x = -0.182856; tab_maxPt.y = -0.155587; tab_maxPt.z = 0.035;
+        tab_minPt.x = -0.752339; tab_minPt.y = -0.879793; tab_minPt.z = -0.01;
+    }
+
     if (!table_fixed){
         //-- Get Bounding Boxes of Table Setting --//
         pcl::getMinMax3D (*filtered_cloud_ptr, tab_minPt, tab_maxPt);}
+
     if (table_cloud != ""){
         removeAxisAlignedBB(filtered_cloud_ptr, table_cloud_ptr, tab_minPt, tab_maxPt, false);
         std::vector<int> indices_tab;
         pcl::removeNaNFromPointCloud(*table_cloud_ptr,*table_cloud_ptr, indices_tab);
+
+        static tf::TransformBroadcaster br;
+        tf::Transform transform;
+        transform.setOrigin( tf::Vector3(tab_maxPt.x, tab_maxPt.y - 0.07, (tab_minPt.z + tab_maxPt.z)/2) );
+        tf::Quaternion q (0,0,0,1);
+        transform.setRotation(q);
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), world_frame, "/task_frame"));
+
     }
 
     /// --- Create Zucchini Pointcloud and Extract Bounding Box with PCA --- ///
@@ -438,8 +459,6 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     std::vector<int> indices_obj;
     pcl::removeNaNFromPointCloud(*object_cloud_ptr,*object_cloud_ptr, indices_obj);
 
-    std::cout << "Original Points Extracted: " << object_cloud_ptr->points.size() << std::endl;
-
     /// -- Apply Region Growing and Euclidean Distance Filter to Find the
     /// Smooth Continuous Surface of the Zucchini -- //
     /// \input  object_cloud_ptr
@@ -448,6 +467,9 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     pcl::PointCloud<pcl::Normal>::Ptr object_normals_ptr (new pcl::PointCloud<pcl::Normal>);
     pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr final_object_ptr (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    pcl::PointXYZRGBNormal  bb_minPoint, bb_maxPoint;
+    Eigen::Quaternionf bb_Quat;
+    Eigen::Vector3f bb_Transform;
 
     if (object_cloud_ptr->points.size() > 100){
 
@@ -533,48 +555,61 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         extract.filterDirectly(final_object_ptr);
         std::vector<int> indices_filt;
         pcl::removeNaNFromPointCloud(*final_object_ptr,*final_object_ptr, indices_filt);
-        std::cout << "Final Points Extracted: " << final_object_ptr->points.size() << std::endl;
+
+
+        /// --- Compute principal directions of the Zucchini --- ///
+        /// \brief Compute centroid and PCA to get the enclosing
+        /// bounding box of the points belonging to the object
+        ///
+        Eigen::Vector4f pcaCentroid;
+        pcl::compute3DCentroid(*final_object_ptr, pcaCentroid);
+        Eigen::Matrix3f covariance;
+        computeCovarianceMatrixNormalized(*final_object_ptr, pcaCentroid, covariance);
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance, Eigen::ComputeEigenvectors);
+        Eigen::Matrix3f eigenVectorsPCA = eigen_solver.eigenvectors();
+        eigenVectorsPCA.col(2) = eigenVectorsPCA.col(0).cross(eigenVectorsPCA.col(1)); /// Necessary for proper orientation
+
+        ///-- Transform object to PCA Basis --///
+        /// \brief Transform the original cloud to the origin    pcl::PointXYZRGBNormal  bb_minPoint, bb_maxPoint;
+        /// where the principal components correspond to the axes.
+        ///
+        Eigen::Matrix4f projectionTransform(Eigen::Matrix4f::Identity());
+        projectionTransform.block<3,3>(0,0) = eigenVectorsPCA.transpose();
+        projectionTransform.block<3,1>(0,3) = -1.f * (projectionTransform.block<3,3>(0,0) * pcaCentroid.head<3>());
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr final_object_projected_ptr (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        pcl::transformPointCloud(*final_object_ptr, *final_object_projected_ptr, projectionTransform);
+
+        ///-- Extract Bounding Box Parameters --///
+        /// \brief By computing the minimum and
+        /// maximum points of the transformed cloud
+        /// in the PCA basis.
+        ///
+        pcl::getMinMax3D(*final_object_projected_ptr, bb_minPoint, bb_maxPoint);
+        const Eigen::Vector3f meanDiagonal = 0.5f*(bb_maxPoint.getVector3fMap() + bb_minPoint.getVector3fMap());
+        const Eigen::Quaternionf bb_Quat2(eigenVectorsPCA);
+        bb_Quat = Eigen::Quaternionf(bb_Quat2);
+        bb_Transform = eigenVectorsPCA * meanDiagonal + pcaCentroid.head<3>();
+
+        ///-- Extract Bounding Box Parameters --///
+        /// \brief publish object transform
+        ///
+        static tf::TransformBroadcaster br;
+        tf::Transform transform;
+        transform.setOrigin(tf::Vector3(pcaCentroid[0], pcaCentroid[1], pcaCentroid[2]));
+        tf::Quaternion q;
+        tf::quaternionEigenToTF(bb_Quat.cast<double>(),q);
+        transform.setRotation(q);
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), world_frame, "/object_frame"));
+
+
         valid_object = true;
+
     }
     else{
          colored_cloud = object_cloud_ptr;
          valid_object = false;
     }
 
-
-    /// --- Compute principal directions of the Zucchini --- ///
-    /// \brief Compute centroid and PCA to get the enclosing
-    /// bounding box of the points belonging to the object
-    ///
-    Eigen::Vector4f pcaCentroid;
-    pcl::compute3DCentroid(*object_cloud_ptr, pcaCentroid);
-    Eigen::Matrix3f covariance;
-    computeCovarianceMatrixNormalized(*object_cloud_ptr, pcaCentroid, covariance);
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance, Eigen::ComputeEigenvectors);
-    Eigen::Matrix3f eigenVectorsPCA = eigen_solver.eigenvectors();
-    eigenVectorsPCA.col(2) = eigenVectorsPCA.col(0).cross(eigenVectorsPCA.col(1)); /// Necessary for proper orientation
-
-
-    ///-- Transform object to PCA Basis --///
-    /// \brief Transform the original cloud to the origin
-    /// where the principal components correspond to the axes.
-    ///
-    Eigen::Matrix4f projectionTransform(Eigen::Matrix4f::Identity());
-    projectionTransform.block<3,3>(0,0) = eigenVectorsPCA.transpose();
-    projectionTransform.block<3,1>(0,3) = -1.f * (projectionTransform.block<3,3>(0,0) * pcaCentroid.head<3>());
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_projected_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
-    pcl::transformPointCloud(*object_cloud_ptr, *object_projected_ptr, projectionTransform);
-
-    ///-- Extract Bounding Box Parameters --///
-    /// \brief By computing the minimum and
-    /// maximum points of the transformed cloud
-    /// in the PCA basis.
-    ///
-    pcl::PointXYZRGB bb_minPoint, bb_maxPoint;
-    pcl::getMinMax3D(*object_projected_ptr, bb_minPoint, bb_maxPoint);
-    const Eigen::Vector3f meanDiagonal = 0.5f*(bb_maxPoint.getVector3fMap() + bb_minPoint.getVector3fMap());
-    const Eigen::Quaternionf bb_Quat(eigenVectorsPCA);
-    const Eigen::Vector3f bb_Transform = eigenVectorsPCA * meanDiagonal + pcaCentroid.head<3>();
 
 
     ///-- PCL Visualization -- ///
@@ -593,11 +628,13 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
 
 
         /// -- Visualize Object Pointcloud -- ///
-        updateVis(visor,colored_cloud, object);
         visor->removeShape(object);
-        visor->addCube(bb_Transform, bb_Quat , bb_maxPoint.x - bb_minPoint.x, bb_maxPoint.y - bb_minPoint.y, bb_maxPoint.z - bb_minPoint.z, object);
-        if (valid_object)
+        updateVis(visor,colored_cloud, object);
+        if (valid_object){
+            visor->addCube(bb_Transform, bb_Quat , bb_maxPoint.x - bb_minPoint.x, bb_maxPoint.y - bb_minPoint.y, bb_maxPoint.z - bb_minPoint.z, object);
             updateVisNormals(visor, object_cloud_ptr, object_normals_ptr);
+        }
+
     }
 
     /// -- Point Cloud Publishing -- ///
