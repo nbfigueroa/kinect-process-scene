@@ -40,11 +40,6 @@
 #define K2_TOPIC_COMPRESSED    "/compressed"
 #define K2_TOPIC_INFO          "/camera_info"
 
-#define K2_CALIB_COLOR         "calib_color.yaml"
-#define K2_CALIB_IR            "calib_ir.yaml"
-#define K2_CALIB_POSE          "calib_pose.yaml"
-#define K2_CALIB_DEPTH         "calib_depth.yaml"
-
 #define K2_CALIB_CAMERA_MATRIX "cameraMatrix"
 #define K2_CALIB_DISTORTION    "distortionCoefficients"
 #define K2_CALIB_ROTATION      "rotation"

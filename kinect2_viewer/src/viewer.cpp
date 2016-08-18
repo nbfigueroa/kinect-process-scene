@@ -292,7 +292,7 @@ private:
         if(mode == IMAGE)
         {
           createCloud(depth, color, cloud);
-          saveCloudAndImages(cloud, color, depth, depthDisp);
+          // saveCloudAndImages(cloud, color, depth, depthDisp);
         }
         else
         {
@@ -348,7 +348,7 @@ private:
         save = false;
         cv::Mat depthDisp;
         dispDepth(depth, depthDisp, 12000.0f);
-        saveCloudAndImages(cloud, color, depth, depthDisp);
+        // saveCloudAndImages(cloud, color, depth, depthDisp);
       }
       visualizer->spinOnce(10);
     }
@@ -465,27 +465,27 @@ private:
     }
   }
 
-  void saveCloudAndImages(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr cloud, const cv::Mat &color, const cv::Mat &depth, const cv::Mat &depthColored)
-  {
-    oss.str("");
-    oss << "./" << std::setfill('0') << std::setw(4) << frame;
-    const std::string baseName = oss.str();
-    const std::string cloudName = baseName + "_cloud.pcd";
-    const std::string colorName = baseName + "_color.jpg";
-    const std::string depthName = baseName + "_depth.png";
-    const std::string depthColoredName = baseName + "_depth_colored.png";
+  // void saveCloudAndImages(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr cloud, const cv::Mat &color, const cv::Mat &depth, const cv::Mat &depthColored)
+  // {
+  //   oss.str("");
+  //   oss << "./" << std::setfill('0') << std::setw(4) << frame;
+  //   const std::string baseName = oss.str();
+  //   const std::string cloudName = baseName + "_cloud.pcd";
+  //   const std::string colorName = baseName + "_color.jpg";
+  //   const std::string depthName = baseName + "_depth.png";
+  //   const std::string depthColoredName = baseName + "_depth_colored.png";
 
-    OUT_INFO("saving cloud: " << cloudName);
-    writer.writeBinary(cloudName, *cloud);
-    OUT_INFO("saving color: " << colorName);
-    cv::imwrite(colorName, color, params);
-    OUT_INFO("saving depth: " << depthName);
-    cv::imwrite(depthName, depth, params);
-    OUT_INFO("saving depth: " << depthColoredName);
-    cv::imwrite(depthColoredName, depthColored, params);
-    OUT_INFO("saving complete!");
-    ++frame;
-  }
+  //   ROS_INFO_STREAM("saving cloud: " << cloudName);
+  //   writer.writeBinary(cloudName, *cloud);
+  //   ROS_INFO_STREAM("saving color: " << colorName);
+  //   cv::imwrite(colorName, color, params);
+  //   ROS_INFO_STREAM("saving depth: " << depthName);
+  //   cv::imwrite(depthName, depth, params);
+  //   ROS_INFO_STREAM("saving depth: " << depthColoredName);
+  //   cv::imwrite(depthColoredName, depthColored, params);
+  //   ROS_INFO_STREAM("saving complete!");
+  //   ++frame;
+  // }
 
   void createLookup(size_t width, size_t height)
   {
@@ -511,16 +511,16 @@ private:
   }
 };
 
-void help(const std::string &path)
-{
-  std::cout << path << FG_BLUE " [options]" << std::endl
-            << FG_GREEN "  name" NO_COLOR ": " FG_YELLOW "'any string'" NO_COLOR " equals to the kinect2_bridge topic base name" << std::endl
-            << FG_GREEN "  mode" NO_COLOR ": " FG_YELLOW "'qhd'" NO_COLOR ", " FG_YELLOW "'hd'" NO_COLOR ", " FG_YELLOW "'sd'" NO_COLOR " or " FG_YELLOW "'ir'" << std::endl
-            << FG_GREEN "  visualization" NO_COLOR ": " FG_YELLOW "'image'" NO_COLOR ", " FG_YELLOW "'cloud'" NO_COLOR " or " FG_YELLOW "'both'" << std::endl
-            << FG_GREEN "  options" NO_COLOR ":" << std::endl
-            << FG_YELLOW "    'compressed'" NO_COLOR " use compressed instead of raw topics" << std::endl
-            << FG_YELLOW "    'approx'" NO_COLOR " use approximate time synchronization" << std::endl;
-}
+// void help(const std::string &path)
+// {
+//   std::cout << path << FG_BLUE " [options]" << std::endl
+//             << FG_GREEN "  name" NO_COLOR ": " FG_YELLOW "'any string'" NO_COLOR " equals to the kinect2_bridge topic base name" << std::endl
+//             << FG_GREEN "  mode" NO_COLOR ": " FG_YELLOW "'qhd'" NO_COLOR ", " FG_YELLOW "'hd'" NO_COLOR ", " FG_YELLOW "'sd'" NO_COLOR " or " FG_YELLOW "'ir'" << std::endl
+//             << FG_GREEN "  visualization" NO_COLOR ": " FG_YELLOW "'image'" NO_COLOR ", " FG_YELLOW "'cloud'" NO_COLOR " or " FG_YELLOW "'both'" << std::endl
+//             << FG_GREEN "  options" NO_COLOR ":" << std::endl
+//             << FG_YELLOW "    'compressed'" NO_COLOR " use compressed instead of raw topics" << std::endl
+//             << FG_YELLOW "    'approx'" NO_COLOR " use approximate time synchronization" << std::endl;
+// }
 
 int main(int argc, char **argv)
 {
@@ -553,7 +553,7 @@ int main(int argc, char **argv)
 
     if(param == "-h" || param == "--help" || param == "-?" || param == "--?")
     {
-      help(argv[0]);
+      // help(argv[0]);
       ros::shutdown();
       return 0;
     }
@@ -606,12 +606,12 @@ int main(int argc, char **argv)
 
   topicColor = "/" + ns + topicColor;
   topicDepth = "/" + ns + topicDepth;
-  OUT_INFO("topic color: " FG_CYAN << topicColor << NO_COLOR);
-  OUT_INFO("topic depth: " FG_CYAN << topicDepth << NO_COLOR);
+  ROS_INFO_STREAM("topic color: "  << topicColor );
+  ROS_INFO_STREAM("topic depth: "  << topicDepth );
 
   Receiver receiver(topicColor, topicDepth, useExact, useCompressed);
 
-  OUT_INFO("starting receiver...");
+  ROS_INFO_STREAM("starting receiver...");
   receiver.run(mode);
 
   ros::shutdown();
