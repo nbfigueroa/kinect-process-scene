@@ -57,6 +57,11 @@ double norm_rad(0.03) ; //[m]
 ///-- Booleans to do stuff --///
 bool pcl_viz(0), pub_rviz(0), table_fixed(1), write_pcd(0), valid_object(0), cutting_board(0);
 
+
+///-- Transforms for Filters --///
+Eigen::Affine3d k2b_eig, b2k_eig;
+Eigen::Affine3d arm, arm_back;
+
 ///-- Parameter Reader --///
 bool parseParams(const ros::NodeHandle& n) {
     bool ret = true;
@@ -208,7 +213,7 @@ bool parseParams(const ros::NodeHandle& n) {
 boost::shared_ptr<pcl::visualization::PCLVisualizer> visor;
 boost::shared_ptr<pcl::visualization::PCLVisualizer> createVis ()
 {
-  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("Zucchini Segmentation"));
   viewer->setBackgroundColor (0, 0, 0);
   viewer->initCameraParameters ();
   viewer->addCoordinateSystem (0.2);
@@ -336,63 +341,17 @@ const std::string currentDateTime() {
     return buf;
 }
 
-void cloud_processing (){
+void extract_table_object (pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_ptr, pcl::PointCloud<pcl::PointXYZRGB>::Ptr& table_cloud_ptr,
+                       pcl::PointCloud<pcl::PointXYZRGB>::Ptr& object_cloud_ptr,  pcl::PointXYZRGB& tab_minPt, pcl::PointXYZRGB& tab_maxPt)
+{
 
-}
-
-
-///-- PointCloud Callback ---//
-void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
-
-
-    /// --- Data containers for Point Cloud Processing -- ///
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>(*cloud_in));
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr table_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
-
-    /// ---Extracting Reference Frames of Camera wrt. Robot Base and Arm EE Frame ---///
-    tf::TransformListener listener;
-    tf::StampedTransform base2kinect, base2arm;
-    try{
-        // Camera Frame
-        listener.waitForTransform(world_frame,camera_frame, ros::Time(0), ros::Duration(2.0) );
-        listener.lookupTransform(world_frame,camera_frame, ros::Time(0), base2kinect);
-
-        // Arm Frame
-        listener.waitForTransform(world_frame, arm_frame, ros::Time(0), ros::Duration(2.0) );
-        listener.lookupTransform(world_frame, arm_frame, ros::Time(0), base2arm);
-    }
-    catch (tf::TransformException ex){
-        ROS_ERROR("%s",ex.what());
-        ros::Duration(1.0).sleep();
-    }
-
-    /// --- Apply Conversions from TF to Eigen --///
-    /// \brief Annoying AF
-    ///
-    // For Robot Base-Kinect
-    tf::Transform b2k = base2kinect;
-    tf::Transform kinect2base = base2kinect.inverse();
-    Eigen::Affine3d k2b_eig, b2k_eig;
-    tf::transformTFToEigen(kinect2base,k2b_eig);
-    tf::transformTFToEigen(b2k,b2k_eig);
-
-    // For Robot Base-Arm EE
-    Eigen::Quaterniond arm_quat_conv;
-    Eigen::Vector3d arm_pos_conv;
-    tf::quaternionTFToEigen(base2arm.getRotation(), arm_quat_conv);
-    tf::vectorTFToEigen(base2arm.getOrigin(), arm_pos_conv);
-
-    Eigen::Affine3d arm, arm_back;
-    tf::transformTFToEigen(base2arm.inverse(),arm);
-    tf::transformTFToEigen(base2arm,arm_back);
 
     /// --- Remove background with pass-through filter --- ///
     /// \brief applyPassThroughFilter
     /// Removes Data from Point Cloud within the selected bounds
     ///
-    applyPassThroughFilter(input_cloud_ptr , filtered_cloud_ptr,x_min, x_max, y_min, y_max, z_min, z_max);
+    applyPassThroughFilter(input_cloud_ptr , filtered_cloud_ptr, x_min, x_max, y_min, y_max, z_min, z_max);
 
     /// --- Removing Outliers in Scene --- ///
     /// \brief If desired, filtering out
@@ -412,7 +371,6 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     /// i.e. (table_fixed=true) or with Bounding Box from minmax values
     /// -- only do this if table topic name is given
     pcl::transformPointCloud (*filtered_cloud_ptr, *filtered_cloud_ptr, b2k_eig);
-    pcl::PointXYZRGB tab_minPt, tab_maxPt;
     if (cutting_board){// Params for Cutting Board
         tab_maxPt.x = -0.402856; tab_maxPt.y = -0.355587; tab_maxPt.z = 0.035;
         tab_minPt.x = -0.612339; tab_minPt.y = -0.659793; tab_minPt.z = -0.01;
@@ -459,17 +417,21 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     std::vector<int> indices_obj;
     pcl::removeNaNFromPointCloud(*object_cloud_ptr,*object_cloud_ptr, indices_obj);
 
+}
+
+
+
+
+void process_object(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& object_cloud_ptr, pcl::PointCloud<pcl::Normal>::Ptr&  object_normals_ptr,
+                    pcl::PointCloud <pcl::PointXYZRGB>::Ptr& colored_cloud, pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& final_object_ptr,
+                    pcl::PointXYZRGBNormal& bb_minPoint, pcl::PointXYZRGBNormal& bb_maxPoint, Eigen::Quaternionf& bb_Quat, Eigen::Vector3f& bb_Transform)
+{
+
     /// -- Apply Region Growing and Euclidean Distance Filter to Find the
     /// Smooth Continuous Surface of the Zucchini -- //
     /// \input  object_cloud_ptr
     /// \output object_cloud_ptr
     ///
-    pcl::PointCloud<pcl::Normal>::Ptr object_normals_ptr (new pcl::PointCloud<pcl::Normal>);
-    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr final_object_ptr (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    pcl::PointXYZRGBNormal  bb_minPoint, bb_maxPoint;
-    Eigen::Quaternionf bb_Quat;
-    Eigen::Vector3f bb_Transform;
 
     if (object_cloud_ptr->points.size() > 100){
 
@@ -487,8 +449,6 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
         normalEstimator.setViewPoint(xyz_centroid[0],xyz_centroid[1],xyz_centroid[2]+0.3);
         normalEstimator.compute(*object_normals_ptr);
         pcl::concatenateFields (*object_cloud_ptr, *object_normals_ptr, *final_object_ptr);
-
-
 
         /// -- Check for point-to-point Euclidean Distances -- ///
         pcl::search::KdTree<pcl::PointXYZRGBNormal>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBNormal>);
@@ -611,6 +571,73 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     }
 
 
+}
+
+///-- PointCloud Callback ---//
+void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
+
+
+    /// --- Data containers for Point Cloud Processing -- ///
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>(*cloud_in));    
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr table_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    /// ---Extracting Reference Frames of Camera wrt. Robot Base and Arm EE Frame ---///
+    tf::TransformListener listener;
+    tf::StampedTransform base2kinect, base2arm;
+    try{
+        // Camera Frame
+        listener.waitForTransform(world_frame,camera_frame, ros::Time(0), ros::Duration(1.0) );
+        listener.lookupTransform(world_frame,camera_frame, ros::Time(0), base2kinect);
+
+        // Arm Frame
+        listener.waitForTransform(world_frame, arm_frame, ros::Time(0), ros::Duration(1.0) );
+        listener.lookupTransform(world_frame, arm_frame, ros::Time(0), base2arm);
+    }
+    catch (tf::TransformException ex){
+        ROS_ERROR("%s",ex.what());
+        ros::Duration(1.0).sleep();
+    }
+
+    /// --- Apply Conversions from TF to Eigen --///
+    /// \brief Annoying AF
+    ///
+    // For Robot Base-Kinect
+    tf::Transform b2k = base2kinect;
+    tf::Transform kinect2base = base2kinect.inverse();
+    tf::transformTFToEigen(base2kinect.inverse(),k2b_eig);
+    tf::transformTFToEigen(base2kinect,b2k_eig);
+
+    // For Robot Base-Arm EE
+    Eigen::Quaterniond arm_quat_conv;
+    Eigen::Vector3d arm_pos_conv;
+    tf::quaternionTFToEigen(base2arm.getRotation(), arm_quat_conv);
+    tf::vectorTFToEigen(base2arm.getOrigin(), arm_pos_conv);
+    tf::transformTFToEigen(base2arm.inverse(),arm);
+    tf::transformTFToEigen(base2arm,arm_back);
+
+    /// -- Extract Table and Object with BB Method -- ///
+    /// \brief extract_table_object
+    /// Takes in the raw input point cloud, applies
+    /// filters to segment table and object as two
+    /// new point clouds
+    ///
+    pcl::PointXYZRGB tab_minPt,  tab_maxPt;
+    extract_table_object(input_cloud_ptr, table_cloud_ptr, object_cloud_ptr, tab_minPt,  tab_maxPt);
+
+    /// -- Process Object Point Cloud to extract Smooth Surface -- ///
+    /// \brief process_object
+    /// Applies Region Growing and Euclidean Clustering algorithm to
+    /// raw object point cloud.
+    ///
+    ///
+    pcl::PointCloud<pcl::Normal>::Ptr object_normals_ptr (new pcl::PointCloud<pcl::Normal>);
+    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr final_object_ptr (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    pcl::PointXYZRGBNormal  bb_minPoint, bb_maxPoint;
+    Eigen::Quaternionf bb_Quat;
+    Eigen::Vector3f bb_Transform;
+    process_object(object_cloud_ptr, object_normals_ptr, colored_cloud, final_object_ptr, bb_minPoint, bb_maxPoint, bb_Quat, bb_Transform);
 
     ///-- PCL Visualization -- ///
     /// \brief If true visualize clouds
@@ -704,5 +731,8 @@ main (int argc, char** argv)
   }
   else{        // Otherwise
   ros::spin ();}
+
+  ros::shutdown();
+  return 0;
 
 }

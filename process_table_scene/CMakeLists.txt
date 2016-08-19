@@ -142,7 +142,7 @@ add_executable(filter_tabletop_scene src/filter_tabletop_scene.cpp)
 link_directories(${PCL_LIBRARY_DIRS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(filter_tabletop_scene ${catkin_LIBRARIES} ${PCL_LIBRARIES} libpcl_kdtree.so libvtkCommon.so libvtkFiltering.so )
+target_link_libraries(filter_tabletop_scene ${catkin_LIBRARIES} ${PCL_LIBRARIES} libpcl_common.so libpcl_kdtree.so libvtkCommon.so libvtkFiltering.so )
 
 #############
 ## Install ##

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(kinect2_viewer CXX)
+project(kinect2_receiver CXX)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBT_USE_DOUBLE_PRECISION -Wall")
 # Unused warnings
@@ -24,7 +24,8 @@ find_package(catkin REQUIRED COMPONENTS roscpp rostime std_msgs sensor_msgs mess
 ## System dependencies are found with CMake's conventions
 find_package(OpenCV REQUIRED)
 find_package(OpenMP)
-find_package(PCL REQUIRED)
+find_package(PCL 1.7  REQUIRED)
+find_package(Boost REQUIRED)
 
 if(OPENMP_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -45,8 +46,8 @@ endif()
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES kinect2_viewer
-#  CATKIN_DEPENDS other_catkin_pkg
+  LIBRARIES kinect2_receiver
+  CATKIN_DEPENDS roscpp rostime std_msgs sensor_msgs  message_filters cv_bridge image_transport  image_transport compressed_image_transport compressed_depth_image_transport
 #  DEPENDS system_lib
 )
 
@@ -55,26 +56,33 @@ catkin_package(
 ###########
 
 # Display additional files in qtcreator
-execute_process(COMMAND find ${PROJECT_SOURCE_DIR} -type f OUTPUT_VARIABLE FILES_STRING)
-string(REPLACE "\n" ";" FILES_LIST ${FILES_STRING})
-add_custom_target(additional_files_${PROJECT_NAME}
-  SOURCES
-  ${FILES_LIST}
+#execute_process(COMMAND find ${PROJECT_SOURCE_DIR} -type f OUTPUT_VARIABLE FILES_STRING)
+#string(REPLACE "\n" ";" FILES_LIST ${FILES_STRING})
+#add_custom_target(additional_files_${PROJECT_NAME}
+#  SOURCES
+#  ${FILES_LIST}
+#)
+
+include_directories(
+    include/receiver
+    ${catkin_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
 )
 
-include_directories(include
-  ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
-  ${PCL_INCLUDE_DIRS}
-#  ${kinect2_bridge_INCLUDE_DIRS}
-)
+## Declare a C++ library
+add_library(kinect2_receiver src/receiver/kinect2_receiver.cpp)
+target_link_libraries(kinect2_receiver ${catkin_LIBRARIES})
+#add_dependencies(kinect2_receiver ${catkin_EXPORTED_TARGETS})
+#link_directories(${PCL_LIBRARY_DIRS} ${OpenCV_LIBRARY_DIRS} )
 
-add_executable(kinect2_viewer src/viewer.cpp)
-target_link_libraries(kinect2_viewer
+## Declare a C++ Executable
+add_executable(viewer_node src/viewer_node.cpp)
+target_link_libraries(viewer_node
+  kinect2_receiver
   ${catkin_LIBRARIES}
-  ${OpenCV_LIBRARIES}
   ${PCL_LIBRARIES}
-  #${kinect2_bridge_LIBRARIES}
+  ${OpenCV_LIBRARIES}
 )
 
 #############
@@ -92,10 +100,16 @@ target_link_libraries(kinect2_viewer
 # )
 
 ## Mark executables and/or libraries for installation
-install(TARGETS kinect2_viewer
+install(TARGETS viewer_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(TARGETS kinect2_receiver
+#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
 ## Mark cpp header files for installation
