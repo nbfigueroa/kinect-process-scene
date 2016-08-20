@@ -13,20 +13,22 @@ This class listens to two ROS topics (depth and color + camera info) and has the
 - PCL (1.7-ish)
 
 # Usage
-After launching the kinect2_bridge on any machine in the network as:
+After launching the kinect2_bridge on any machine in the network with:
 ```
 roslaunch kinect2_bridge kinect2_bridge.launch
 ```
 
 You can subscribe to the low-resolution depth and color images and view/publish the registered point cloud with:
 
-Example: `rosrun kinect2_viewer viewer_node`
-Example: `rosrun kinect2_viewer publisher_node`
+You can either just view the points cloud: 
+`rosrun kinect2_viewer viewer_node`
+
+OR publish it: 
+`rosrun kinect2_viewer publisher_node`
+
 
 ## Key bindings
 
 Window Viewer:
 - `ESC`, `q`: Quit
 
-Terminal:
-- `CRTL`+`c`: Quit
