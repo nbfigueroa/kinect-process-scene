@@ -30,7 +30,7 @@ OR publish it:
 rosrun kinect2_viewer publisher_node
 ```
 
-## Key bindings
+## Key bindings for the Viewer
 
 Window Viewer:
 - `ESC`, `q`: Quit
