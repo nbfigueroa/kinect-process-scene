@@ -5,7 +5,8 @@
 Kinect2_Receiver::Kinect2_Receiver(const std::string &topicColor, const std::string &topicDepth, const bool useCompressed)
     : topicColor(topicColor), topicDepth(topicDepth), useCompressed(useCompressed),
       updateCloud(false), running(false), frame(0), queueSize(5),
-      nh("~"), spinner(0), it(nh){
+      nh("~"), spinner(0), it(nh)
+{
     cameraMatrixColor = cv::Mat::zeros(3, 3, CV_64F);
     cameraMatrixDepth = cv::Mat::zeros(3, 3, CV_64F);
     params.push_back(cv::IMWRITE_JPEG_QUALITY);
@@ -15,6 +16,9 @@ Kinect2_Receiver::Kinect2_Receiver(const std::string &topicColor, const std::str
     params.push_back(cv::IMWRITE_PNG_STRATEGY);
     params.push_back(cv::IMWRITE_PNG_STRATEGY_RLE);
     params.push_back(0);
+    publishCloud = false;
+
+
 }
 
 
@@ -22,13 +26,14 @@ Kinect2_Receiver::~Kinect2_Receiver()
 {
 }
 
-void Kinect2_Receiver::run_viewer(){
-    publishCloud = false;
+void Kinect2_Receiver::run_viewer()
+{
     Kinect2_Receiver::start();
     Kinect2_Receiver::stop();
 }
 
-void Kinect2_Receiver::run_publisher(const std::string &topicCloud_, const bool withViewer_){
+void Kinect2_Receiver::run_publisher(const std::string &topicCloud_, const bool withViewer_)
+{
     topicCloud = topicCloud_;
     withViewer = withViewer_;
     publishCloud = true;
@@ -36,7 +41,8 @@ void Kinect2_Receiver::run_publisher(const std::string &topicCloud_, const bool 
     Kinect2_Receiver::stop();
 }
 
-void Kinect2_Receiver::start(){
+void Kinect2_Receiver::start()
+{
     running = true;
 
     std::string topicCameraInfoColor = topicColor.substr(0, topicColor.rfind('/')) + "/camera_info";
@@ -76,11 +82,15 @@ void Kinect2_Receiver::start(){
     createLookup(this->color.cols, this->color.rows);
 
     // Visualize/Publish Point Cloud
-    cloudViewer();
+    if (publishCloud && !withViewer)
+        cloudPublisher();
+    else
+        cloudViewer();
 }
 
 
-void Kinect2_Receiver::stop(){
+void Kinect2_Receiver::stop()
+{
     Kinect2_Receiver::spinner.stop();
 
     delete syncExact;
@@ -93,7 +103,8 @@ void Kinect2_Receiver::stop(){
 }
 
 void Kinect2_Receiver::callback(const sensor_msgs::Image::ConstPtr imageColor, const sensor_msgs::Image::ConstPtr imageDepth,
-              const sensor_msgs::CameraInfo::ConstPtr cameraInfoColor, const sensor_msgs::CameraInfo::ConstPtr cameraInfoDepth){
+              const sensor_msgs::CameraInfo::ConstPtr cameraInfoColor, const sensor_msgs::CameraInfo::ConstPtr cameraInfoDepth)
+{
   cv::Mat color, depth;
 
   readCameraInfo(cameraInfoColor, cameraMatrixColor);
@@ -117,8 +128,8 @@ void Kinect2_Receiver::callback(const sensor_msgs::Image::ConstPtr imageColor, c
 }
 
 
-
-void Kinect2_Receiver::generateCloud(){
+void Kinect2_Receiver::generateCloud()
+{
     cv::Mat color, depth;
     lock.lock();
     color = this->color;
@@ -128,14 +139,16 @@ void Kinect2_Receiver::generateCloud(){
     createCloud(depth, color, cloud);
 }
 
-void Kinect2_Receiver::sendCloud(){
+void Kinect2_Receiver::sendCloud()
+{
     cloud->header.frame_id = cloudFrame;
     pcl::PCLPointCloud2 output;
     pcl::toPCLPointCloud2(*cloud,output);
     pubCloud.publish (output);
 }
 
-void Kinect2_Receiver::cloudViewer(){
+void Kinect2_Receiver::cloudViewer()
+{
   pcl::visualization::PCLVisualizer::Ptr visualizer(new pcl::visualization::PCLVisualizer("Kinect2 Viewer"));
   const std::string cloudName = "rendered";
 
@@ -165,6 +178,20 @@ void Kinect2_Receiver::cloudViewer(){
     visualizer->spinOnce(10);
   }
   visualizer->close();
+}
+
+void Kinect2_Receiver::cloudPublisher()
+{
+    generateCloud();
+    for(; running && ros::ok();)
+    {
+      if(updateCloud)
+      {
+        generateCloud();
+        sendCloud();
+      }
+    }
+
 }
 
 

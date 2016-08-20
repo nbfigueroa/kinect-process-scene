@@ -96,6 +96,8 @@ private:
 
   void sendCloud();
 
+  void cloudPublisher();
+
   void cloudViewer();
 
   void keyboardEvent(const pcl::visualization::KeyboardEvent &event, void *);

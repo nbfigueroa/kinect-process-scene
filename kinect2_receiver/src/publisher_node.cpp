@@ -17,7 +17,7 @@ int main(int argc, char **argv)
   std::string topicDepth = K2_TOPIC_SD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
   std::string topicCloud = K2_TOPIC_SD;
   bool useCompressed = false;
-  bool runViewer     = true;
+  bool withViewer    = false;
 
   // Subscribing to
   topicColor = "/" + ns + topicColor;
@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   // Instantiate Receiver Class
   Kinect2_Receiver receiver(topicColor, topicDepth, useCompressed);
   ROS_INFO_STREAM("starting publisher...");
-  receiver.run_publisher(topicCloud, runViewer);
+  receiver.run_publisher(topicCloud, withViewer);
 
   ros::shutdown();
   return 0;
