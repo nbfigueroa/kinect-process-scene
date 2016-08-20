@@ -1,9 +1,0 @@
-bool detect
----
-bool dough_found
-geometry_msgs/Transform object_frame
-geometry_msgs/Transform reach_center_attractor
-geometry_msgs/Transform reach_corner_attractor
-geometry_msgs/Transform roll_attractor
-geometry_msgs/Transform back_attractor
-float64 area

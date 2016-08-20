@@ -1,7 +1,0 @@
-<!-- IMAGE CAPTURE -->
-<launch>  
-<!--   <node pkg="pizza_demo_year3" type="image_capture" name="image_capture" args="" output="screen"> -->
-  <node pkg="lasa_perception_module" type="image_capture" name="image_capture" args="/home/nbfigueroa/dev/ROSws/rosbuild/pizza_demo_year3/data/captured/series_2/" output="screen">
-    <param name="" value="" />
-  </node>
-</launch>
