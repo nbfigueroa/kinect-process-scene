@@ -560,8 +560,6 @@ void process_object(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& object_cloud_ptr, pc
         tf::quaternionEigenToTF(bb_Quat.cast<double>(),q);
         transform.setRotation(q);
         br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), world_frame, "/object_frame"));
-
-
         valid_object = true;
 
     }

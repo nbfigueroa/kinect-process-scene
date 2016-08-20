@@ -18,15 +18,15 @@
 #include <ros/spinner.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
-
+#include <sensor_msgs/PointCloud2.h>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/visualization/cloud_viewer.h>
+#include <pcl_ros/point_cloud.h>
 
 #include <cv_bridge/cv_bridge.h>
-
 
 #include <image_transport/image_transport.h>
 #include <image_transport/subscriber_filter.h>
@@ -40,21 +40,15 @@
 class Kinect2_Receiver
 {
 public:
-  enum Mode
-  {
-    IMAGE = 0,
-    CLOUD,
-    BOTH
-  };
 
 private:
   std::mutex lock;
 
   const std::string topicColor, topicDepth;
-  const bool useExact, useCompressed;
+  std::string topicCloud, cloudFrame;
+  const bool useCompressed;
 
-  bool updateImage, updateCloud;
-  bool save;
+  bool updateCloud, publishCloud, withViewer;
   bool running;
   size_t frame;
   const size_t queueSize;
@@ -64,43 +58,43 @@ private:
   cv::Mat lookupX, lookupY;
 
   typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo, sensor_msgs::CameraInfo> ExactSyncPolicy;
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo, sensor_msgs::CameraInfo> ApproximateSyncPolicy;
 
   ros::NodeHandle nh;
   ros::AsyncSpinner spinner;
   image_transport::ImageTransport it;
   image_transport::SubscriberFilter *subImageColor, *subImageDepth;
   message_filters::Subscriber<sensor_msgs::CameraInfo> *subCameraInfoColor, *subCameraInfoDepth;
-
   message_filters::Synchronizer<ExactSyncPolicy> *syncExact;
-  message_filters::Synchronizer<ApproximateSyncPolicy> *syncApproximate;
-
   std::thread imageViewerThread;
-  Mode mode;
 
   pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud;
-  pcl::PCDWriter writer;
   std::ostringstream oss;
   std::vector<int> params;
+  ros::Publisher pubCloud;
 
 public:
 
-  Kinect2_Receiver(const std::string &topicColor, const std::string &topicDepth, const bool useExact, const bool useCompressed);
+
+  Kinect2_Receiver(const std::string &topicColor, const std::string &topicDepth, const bool useCompressed);
 
   ~Kinect2_Receiver();
 
-  void run(const Mode mode);
+  void run_viewer();
+
+  void run_publisher(const std::string &topicCloud, const bool withViewer);
 
 
 private:
-  void start(const Mode mode);
+  void start();
 
   void stop();
 
   void callback(const sensor_msgs::Image::ConstPtr imageColor, const sensor_msgs::Image::ConstPtr imageDepth,
                 const sensor_msgs::CameraInfo::ConstPtr cameraInfoColor, const sensor_msgs::CameraInfo::ConstPtr cameraInfoDepth);
 
-  void imageViewer();
+  void generateCloud();
+
+  void sendCloud();
 
   void cloudViewer();
 
@@ -109,10 +103,6 @@ private:
   void readImage(const sensor_msgs::Image::ConstPtr msgImage, cv::Mat &image) const;
 
   void readCameraInfo(const sensor_msgs::CameraInfo::ConstPtr cameraInfo, cv::Mat &cameraMatrix) const;
-
-  void dispDepth(const cv::Mat &in, cv::Mat &out, const float maxValue);
-
-  void combine(const cv::Mat &inC, const cv::Mat &inD, cv::Mat &out);
 
   void createCloud(const cv::Mat &depth, const cv::Mat &color, pcl::PointCloud<pcl::PointXYZRGBA>::Ptr &cloud) const;
 

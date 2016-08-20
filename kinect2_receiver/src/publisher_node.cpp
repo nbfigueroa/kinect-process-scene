@@ -15,18 +15,23 @@ int main(int argc, char **argv)
   std::string ns = K2_DEFAULT_NS;
   std::string topicColor = K2_TOPIC_SD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
   std::string topicDepth = K2_TOPIC_SD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
+  std::string topicCloud = K2_TOPIC_SD;
   bool useCompressed = false;
+  bool runViewer     = true;
 
   // Subscribing to
   topicColor = "/" + ns + topicColor;
   topicDepth = "/" + ns + topicDepth;
+  topicCloud = "/" + ns + topicCloud + "/points_rect";
+
   ROS_INFO_STREAM("topic color: "  << topicColor );
   ROS_INFO_STREAM("topic depth: "  << topicDepth );
+  ROS_INFO_STREAM("topic cloud: "  << topicCloud );
 
   // Instantiate Receiver Class
   Kinect2_Receiver receiver(topicColor, topicDepth, useCompressed);
-  ROS_INFO_STREAM("starting viewer...");
-  receiver.run_viewer();
+  ROS_INFO_STREAM("starting publisher...");
+  receiver.run_publisher(topicCloud, runViewer);
 
   ros::shutdown();
   return 0;

@@ -135,6 +135,7 @@ include_directories(
 
 ## Declare a C++ executable
 add_executable(filter_tabletop_scene src/filter_tabletop_scene.cpp)
+#add_executable(filter_tabletop_scene_class src/filter_tabletop_scene_class.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
@@ -143,7 +144,7 @@ link_directories(${PCL_LIBRARY_DIRS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(filter_tabletop_scene ${catkin_LIBRARIES} ${PCL_LIBRARIES} libpcl_common.so libpcl_kdtree.so libvtkCommon.so libvtkFiltering.so )
-
+#target_link_libraries(filter_tabletop_scene_class ${catkin_LIBRARIES} ${PCL_LIBRARIES} libpcl_common.so libpcl_kdtree.so libvtkCommon.so libvtkFiltering.so )
 #############
 ## Install ##
 #############
