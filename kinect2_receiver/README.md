@@ -1,6 +1,6 @@
 # Kinect2 Receiver
 
-My own `Kinect2_receiver` class which processes pre-registered depth and color images from (kinect2-bridge)[https://github.com/code-iai/iai_kinect2]
+My own `Kinect2_receiver` class which processes pre-registered depth and color images from [kinect2-bridge](https://github.com/code-iai/iai_kinect2)
 
 ## Description
 
