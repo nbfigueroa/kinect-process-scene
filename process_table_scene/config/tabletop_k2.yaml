@@ -1,12 +1,12 @@
 #
 # Definition of all input parameters for the filter
 #
-input_cloud:                 '/kinect2/sd/points'
+input_cloud:                 '/kinect2/sd/points_rect'
 table_cloud:                 '/scene/table'
 object_cloud:                '/scene/zucchini'
 camera_frame_name:           '/kinect2_rgb_optical_frame'
 world_frame:                 '/world_frame'
-arm_frame:                   '/right_arm_flange_link'
+arm_topic:                   '/KUKA_RightArm/Pose'
 x_min:                        -0.4
 x_max:                        0.31 
 y_min:                        -0.43

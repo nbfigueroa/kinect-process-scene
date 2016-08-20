@@ -21,7 +21,6 @@ Kinect2_Receiver::Kinect2_Receiver(const std::string &topicColor, const std::str
 
 }
 
-
 Kinect2_Receiver::~Kinect2_Receiver()
 {
 }
@@ -47,7 +46,7 @@ void Kinect2_Receiver::start()
 
     std::string topicCameraInfoColor = topicColor.substr(0, topicColor.rfind('/')) + "/camera_info";
     std::string topicCameraInfoDepth = topicDepth.substr(0, topicDepth.rfind('/')) + "/camera_info";
-    cloudFrame = "/" K2_DEFAULT_NS  K2_TF_RGB_OPT_FRAME;
+    cloudFrame = "/" K2_DEFAULT_NS  K2_TF_IR_OPT_FRAME;
 
     // Image Subscribers
     image_transport::TransportHints hints(useCompressed ? "compressed" : "raw");

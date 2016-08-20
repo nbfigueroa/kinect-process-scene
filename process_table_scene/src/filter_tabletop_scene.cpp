@@ -6,6 +6,7 @@
 
 // Common
 #include <sensor_msgs/PointCloud2.h>
+#include "geometry_msgs/PoseStamped.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
@@ -43,7 +44,7 @@ typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloud_pcl;
 
 ///-- Declare Input/Output Cloud Names --///
 string input_cloud(""), table_cloud(""), object_cloud(""), camera_frame(""), pcd_write_dir(""),
-world_frame(""), arm_frame("");
+world_frame(""), input_pose_topic("");
 
 ///-- Declare PassFilter Parameters --///
 double x_min(-1), x_max(1), y_min(-1), y_max(1), z_min(1), z_max(1.6);
@@ -61,9 +62,11 @@ bool pcl_viz(0), pub_rviz(0), table_fixed(1), write_pcd(0), valid_object(0), cut
 ///-- Transforms for Filters --///
 Eigen::Affine3d k2b_eig, b2k_eig;
 Eigen::Affine3d arm, arm_back;
+tf::Transform base2arm;
 
 ///-- Parameter Reader --///
-bool parseParams(const ros::NodeHandle& n) {
+bool parseParams(const ros::NodeHandle& n)
+{
     bool ret = true;
     if(!n.getParam("input_cloud", input_cloud)) {
         ROS_ERROR("Must provide input cloud name!");
@@ -100,11 +103,11 @@ bool parseParams(const ros::NodeHandle& n) {
         ROS_INFO_STREAM("World Frame Name: "<< world_frame);
     }
 
-    if(!n.getParam("arm_frame", arm_frame)) {
-        ROS_ERROR("Must provide arm frame name!");
+    if(!n.getParam("arm_topic", input_pose_topic)) {
+        ROS_ERROR("Must provide arm topic name!");
         ret = false;
     } else {
-        ROS_INFO_STREAM("Arm Frame Name: "<< arm_frame);
+        ROS_INFO_STREAM("Arm Topic Name: "<< input_pose_topic);
     }
 
     if(!n.getParam("x_min", x_min)) {
@@ -217,25 +220,30 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> createVis ()
   viewer->setBackgroundColor (0, 0, 0);
   viewer->initCameraParameters ();
   viewer->addCoordinateSystem (0.2);
+  viewer->setSize(519, 424);
+  viewer->setShowFPS(true);
+  viewer->setCameraPosition(0.526, -0.455, 0.884, -3.125, 0.188, 1.598);
   return viewer;
 }
 
-void updateVis(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud){
+void updateVis(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud)
+{
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud);
     viewer->removePointCloud();
     viewer->addPointCloud<pcl::PointXYZRGB> (cloud, rgb);
     viewer->spinOnce();
 }
 
-void updateVis(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud, std::string& name){
+void updateVis(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud, std::string& name)
+{
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud);
     viewer->removePointCloud(name);
     viewer->addPointCloud<pcl::PointXYZRGB> (cloud, rgb, name);
     viewer->spinOnce();
 }
 
-void updateVis(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud){
-
+void updateVis(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud)
+{
     pcl::visualization::PointCloudColorHandlerRandom<pcl::PointXYZ> rgb(cloud);
     viewer->removePointCloud();
     viewer->addPointCloud<pcl::PointXYZ> (cloud, rgb);
@@ -244,7 +252,8 @@ void updateVis(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl:
 
 
 void updateVisNormals(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer, pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud_,
-               pcl::PointCloud<pcl::Normal>::ConstPtr normals_){
+               pcl::PointCloud<pcl::Normal>::ConstPtr normals_)
+{
     viewer->removePointCloud("normals",0);
     viewer->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (cloud_, normals_, 10, 0.02, "normals");
     viewer->spinOnce();
@@ -255,8 +264,8 @@ void updateVisNormals(boost::shared_ptr<pcl::visualization::PCLVisualizer> viewe
 ///-- PCL Filtering Functions--///
 void applyPassThroughFilter( pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_ptr ,pcl::PointCloud<pcl::PointXYZRGB>::Ptr& output_cloud_ptr,
                            double& x_min, double& x_max,double& y_min,
-                           double& y_max,double& z_min,double& z_max){
-
+                           double& y_max,double& z_min,double& z_max)
+{
     pcl::PassThrough<pcl::PointXYZRGB> pass;
     pass.setInputCloud (input_cloud_ptr);
     pass.setKeepOrganized(true);
@@ -277,8 +286,8 @@ void applyPassThroughFilter( pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud
 }
 
 void removeAxisAlignedBB(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_ptr ,pcl::PointCloud<pcl::PointXYZRGB>::Ptr& output_cloud_ptr,
-                         pcl::PointXYZRGB&  minPt, pcl::PointXYZRGB& maxPt, bool negative){
-
+                         pcl::PointXYZRGB&  minPt, pcl::PointXYZRGB& maxPt, bool negative)
+{
     /// -- Create Octree to quickly search through bounding box -- ///
     float resolution = 128.0f;
     pcl::octree::OctreePointCloudSearch<pcl::PointXYZRGB> octree (resolution);
@@ -300,12 +309,11 @@ void removeAxisAlignedBB(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_ptr
     extract.setIndices (inliers);
     extract.setNegative (negative);
     extract.filter (*output_cloud_ptr);
-
 }
 
 void removeAxisAlignedBB(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_ptr ,
-                         pcl::PointXYZRGB&  minPt, pcl::PointXYZRGB& maxPt, bool negative){
-
+                         pcl::PointXYZRGB&  minPt, pcl::PointXYZRGB& maxPt, bool negative)
+{
     /// -- Create Octree to quickly search through bounding box -- ///
     float resolution = 128.0f;
     pcl::octree::OctreePointCloudSearch<pcl::PointXYZRGB> octree (resolution);
@@ -326,12 +334,10 @@ void removeAxisAlignedBB(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_ptr
     extract.setIndices (inliers);
     extract.setNegative (negative);
     extract.filterDirectly(input_cloud_ptr);
-
-
 }
 
-
-const std::string currentDateTime() {
+const std::string currentDateTime()
+{
     // Get current date/time, format is YYYY-MM-DD.HH:mm:ss
     time_t     now = time(0);
     struct tm  tstruct;
@@ -418,8 +424,6 @@ void extract_table_object (pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_p
     pcl::removeNaNFromPointCloud(*object_cloud_ptr,*object_cloud_ptr, indices_obj);
 
 }
-
-
 
 
 void process_object(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& object_cloud_ptr, pcl::PointCloud<pcl::Normal>::Ptr&  object_normals_ptr,
@@ -571,8 +575,20 @@ void process_object(pcl::PointCloud<pcl::PointXYZRGB>::Ptr& object_cloud_ptr, pc
 
 }
 
+
+
+///-- Arm EE Callback ---//
+void arm_cb(const geometry_msgs::PoseStampedConstPtr& msg)
+{
+    const geometry_msgs::PoseStamped* data = msg.get();
+    base2arm.setOrigin(tf::Vector3(data->pose.position.x,data->pose.position.y,data->pose.position.z));
+    base2arm.setRotation(tf::Quaternion(data->pose.orientation.x,data->pose.orientation.y,data->pose.orientation.z,data->pose.orientation.w));
+}
+
+
 ///-- PointCloud Callback ---//
-void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
+void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in)
+{
 
 
     /// --- Data containers for Point Cloud Processing -- ///
@@ -581,30 +597,16 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
 
     /// ---Extracting Reference Frames of Camera wrt. Robot Base and Arm EE Frame ---///
-    tf::TransformListener listener;
-    tf::StampedTransform base2kinect, base2arm;
-    try{
-        // Camera Frame
-        listener.waitForTransform(world_frame,camera_frame, ros::Time(0), ros::Duration(1.0) );
-        listener.lookupTransform(world_frame,camera_frame, ros::Time(0), base2kinect);
-
-        // Arm Frame
-        listener.waitForTransform(world_frame, arm_frame, ros::Time(0), ros::Duration(1.0) );
-        listener.lookupTransform(world_frame, arm_frame, ros::Time(0), base2arm);
-    }
-    catch (tf::TransformException ex){
-        ROS_ERROR("%s",ex.what());
-        ros::Duration(1.0).sleep();
-    }
+    // Instead of this subscribe to pose messages!!
 
     /// --- Apply Conversions from TF to Eigen --///
     /// \brief Annoying AF
     ///
-    // For Robot Base-Kinect
-    tf::Transform b2k = base2kinect;
-    tf::Transform kinect2base = base2kinect.inverse();
-    tf::transformTFToEigen(base2kinect.inverse(),k2b_eig);
-    tf::transformTFToEigen(base2kinect,b2k_eig);
+
+    // Hackity hack if Robot Pose not working
+//    tf::StampedTransform base2arm;
+//    base2arm.setOrigin(tf::Vector3(-0.542, -0.259, 0.292));
+//    base2arm.setRotation(tf::Quaternion(0.778, -0.472, 0.259, 0.323));
 
     // For Robot Base-Arm EE
     Eigen::Quaterniond arm_quat_conv;
@@ -622,6 +624,7 @@ void cloud_cb (const PointCloud_pcl::ConstPtr& cloud_in){
     ///
     pcl::PointXYZRGB tab_minPt,  tab_maxPt;
     extract_table_object(input_cloud_ptr, table_cloud_ptr, object_cloud_ptr, tab_minPt,  tab_maxPt);
+
 
     /// -- Process Object Point Cloud to extract Smooth Surface -- ///
     /// \brief process_object
@@ -712,17 +715,46 @@ main (int argc, char** argv)
         return 1;
   }
 
+  /// ---Extracting Reference Frames of Camera wrt. Robot Base and Arm EE Frame ---///
+  tf::TransformListener listener;
+  tf::StampedTransform base2kinect;
+  try{
+      // Camera Frame
+      listener.waitForTransform(world_frame,camera_frame, ros::Time(0), ros::Duration(10.0) );
+      listener.lookupTransform(world_frame,camera_frame, ros::Time(0), base2kinect);
+      ROS_INFO("Found TF");
+  }
+  catch (tf::TransformException ex){
+      ROS_ERROR("%s",ex.what());
+  }
+
+  /// --- Apply Conversions from TF to Eigen --///
+  /// \brief Annoying AF
+  ///
+  // For Robot Base-Kinect
+  tf::Transform b2k = base2kinect;
+  tf::Transform kinect2base = base2kinect.inverse();
+  tf::transformTFToEigen(base2kinect.inverse(),k2b_eig);
+  tf::transformTFToEigen(base2kinect,b2k_eig);
+
+
   ///-- Creat Visualizer Instance --///
   if (pcl_viz)
     visor = createVis();
 
   ///-- Create a ROS subscriber for the input point cloud --///
-  ros::Subscriber sub = nh.subscribe<PointCloud_pcl> (input_cloud, 1, cloud_cb, ros::TransportHints().tcpNoDelay());
+
+  ROS_INFO("Starting Subscribers..");
+  ros::Subscriber cloudSub = nh.subscribe<PointCloud_pcl> (input_cloud, 1, cloud_cb, ros::TransportHints().tcpNoDelay());
+  ros::Subscriber poseSub  = nh.subscribe<geometry_msgs::PoseStamped>(input_pose_topic, 1, arm_cb, ros::TransportHints().tcpNoDelay());
 
   ///-- Create a ROS publishers for the output point clouds --///
+  ROS_INFO("Starting Publishers..");
   pub1 = nh.advertise<sensor_msgs::PointCloud2> (table_cloud, 1);
   pub2 = nh.advertise<sensor_msgs::PointCloud2> (object_cloud, 1);
 
+
+  ROS_INFO("Point Cloud Processing Started..");
   if (pcl_viz){ // If PCL Visualization is instantiated
       while(!visor->wasStopped()){
           ros::spin ();}
