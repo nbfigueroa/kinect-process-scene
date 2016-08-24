@@ -1,10 +1,13 @@
 #ifndef OBJECT_FEATURE_GENERATOR_H
 #define OBJECT_FEATURE_GENERATOR_H
 
-
-#include <ros/ros.h>
 #include <string>
 #include <math.h>
+
+// ROS Stuff
+#include <ros/ros.h>
+#include <ros/time.h>
+#include <geometry_msgs/WrenchStamped.h>
 
 // PCL Stuff
 #include <pcl/point_cloud.h>
@@ -12,10 +15,12 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl_ros/point_cloud.h>
+
 // Eigen Stuff
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
+
 
 typedef pcl::PointCloud<pcl::PointXYZRGBNormal> PointCloud_pcl;
 
@@ -27,8 +32,10 @@ private:
     ros::NodeHandle nh;
     pcl::visualization::PCLVisualizer::Ptr visualizer;
 
-    std::string cloud_topic;
     ros::Subscriber sub;
+    ros::Publisher  pub;
+
+    std::string cloud_topic, feat_topic;
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud;
     bool runViz, running;
     int size;
@@ -36,7 +43,8 @@ private:
 
 public:
 
-    ObjectFeatureGenerator (const std::string cloudTopic, const bool runVisualizer) : cloud_topic(cloudTopic), runViz(runVisualizer)
+    ObjectFeatureGenerator (const std::string cloudTopic, const std::string featTopic, const bool runVisualizer) :
+        cloud_topic(cloudTopic), runViz(runVisualizer), feat_topic(featTopic)
     {
         if (runViz){
             ROS_INFO_STREAM("In Vis" );
@@ -66,6 +74,8 @@ public:
         std::string r_ct = nh.resolveName (cloud_topic);
         ROS_INFO_STREAM("Listening for incoming data on topic " << r_ct );
 
+        pub = nh.advertise<geometry_msgs::WrenchStamped>(feat_topic, 1);
+
         ros::spin();
     }
 
@@ -79,28 +89,56 @@ public:
         if (runViz)
             viewObject();
 
-        ///-- Extract Color into --///
-        Eigen::MatrixXi rgb(size,3);
-        Eigen::MatrixXf hsv(size,3);        
+        ///-- Extracting Color Features from Segmented Object--///
 
+        Eigen::MatrixXd rgb(size,3);
+//        Eigen::MatrixXf hsv(size,3);
         pcl::PointXYZRGBNormal point;
         Eigen::Vector3i rgb_;
         Eigen::Vector3f hsv_;
         for (uint i=0;i<size;i++){
             point = cloud->points.at(i);
             rgb_ = point.getRGBVector3i();
-
-            rgb_to_hsv(rgb_,hsv_);
-            rgb(i,0) = rgb_[0];rgb(i,1) = rgb_[1];rgb(i,2) = rgb_[2];
-            hsv(i,0) = hsv_[0];hsv(i,1) = hsv_[1];hsv(i,2) = hsv_[2];
+//            rgb_to_hsv(rgb_,hsv_);
+            rgb(i,0) = (double)rgb_[0]; rgb(i,1) = (double)rgb_[1]; rgb(i,2) = (double)rgb_[2];
+//            hsv(i,0) = hsv_[0];hsv(i,1) = hsv_[1]*100;hsv(i,2) = hsv_[2]*100;
         }
 
-        Eigen::VectorXi r(size);
-        r = rgb.col(0);
-        std::cout << r << std::endl;
-//        std::cout << rgb << std::endl;
-//        std::cout << hsv << std::endl;
+        // Stats for RGB Channel
+        Eigen::MatrixXd mean_rgb(1,3);
+        mean_rgb = rgb.colwise().mean();
+
+        //-- Compute covariance here
+        Eigen::MatrixXd  centered   = rgb.rowwise() - rgb.colwise().mean();
+        Eigen::MatrixXd covariance = (centered.adjoint() * centered) / double(size - 1);
+        Eigen::MatrixXd std_rgb(1,3);
+        std_rgb << sqrt(covariance.coeff(0,0)) ,  sqrt(covariance.coeff(1,1)) , sqrt(covariance.coeff(2,2));
+
+        //--Debug: Print Features
+//        std::cout << "rgb mean:\n" << mean_rgb << std::endl;
+//        std::cout << "rgb covariance:\n" << covariance << std::endl;
+
+        // Send Feature Message
+        sendFeatures(mean_rgb, std_rgb);
+//        // Stats for HSV Channel
+//        Eigen::MatrixXf mean_hsv(1,3);
+//        mean_hsv = hsv.colwise().mean();
+
     }
+
+    void sendFeatures(const Eigen::MatrixXd mean_rgb, const Eigen::MatrixXd std_rgb) {
+        geometry_msgs::WrenchStamped msg;
+        msg.header.stamp = ros::Time::now();
+        msg.wrench.force.x = mean_rgb.coeff(0);
+        msg.wrench.force.y = mean_rgb.coeff(1);
+        msg.wrench.force.z = mean_rgb.coeff(2);
+
+        msg.wrench.torque.x = std_rgb.coeff(0);
+        msg.wrench.torque.y = std_rgb.coeff(1);
+        msg.wrench.torque.z = std_rgb.coeff(2);
+        pub.publish(msg);
+
+}
 
 
     void viewObject()
@@ -133,136 +171,67 @@ public:
 
     /* math adapted from: http://www.rapidtables.com/convert/color/rgb-to-hsv.htm
      * reasonably optimized for speed, without going crazy */
-    void rgb_to_hsv (Eigen::Vector3i rgb, Eigen::Vector3f& hsv)
-    {
+//    void rgb_to_hsv (Eigen::Vector3i rgb, Eigen::Vector3f& hsv)
+//    {
 
-        int r =  rgb[0]; int g =  rgb[1]; int b =  rgb[2];
-        float r_h, r_s, r_v;
-        float rp, gp, bp, cmax, cmin, delta, l;
-        int cmaxwhich, cminwhich;
-        float HUE_ANGLE = 60;
+//        int r =  rgb[0]; int g =  rgb[1]; int b =  rgb[2];
+//        float r_h, r_s, r_v;
+//        float rp, gp, bp, cmax, cmin, delta, l;
+//        int cmaxwhich, cminwhich;
+//        float HUE_ANGLE = 60;
 
-        rp = ((float) r) / 255;
-        gp = ((float) g) / 255;
-        bp = ((float) b) / 255;
-
-        //debug ("rgb=%d,%d,%d rgbprime=%f,%f,%f", r, g, b, rp, gp, bp);
-
-        cmax = rp;
-        cmaxwhich = 0; /* faster comparison afterwards */
-        if (gp > cmax) { cmax = gp; cmaxwhich = 1; }
-        if (bp > cmax) { cmax = bp; cmaxwhich = 2; }
-        cmin = rp;
-        cminwhich = 0;
-        if (gp < cmin) { cmin = gp; cminwhich = 1; }
-        if (bp < cmin) { cmin = bp; cminwhich = 2; }
-
-        //debug ("cmin=%f,cmax=%f", cmin, cmax);
-        delta = cmax - cmin;
-
-        /* HUE */
-        if (delta == 0) {
-            r_h = 0;
-        } else {
-            switch (cmaxwhich) {
-            case 0: /* cmax == rp */
-                r_h = HUE_ANGLE * (fmod ((gp - bp) / delta, 6));
-                break;
-
-            case 1: /* cmax == gp */
-                r_h = HUE_ANGLE * (((bp - rp) / delta) + 2);
-                break;
-
-            case 2: /* cmax == bp */
-                r_h = HUE_ANGLE * (((rp - gp) / delta) + 4);
-                break;
-            }
-            if (r_h < 0)
-                r_h += 360;
-        }
-
-        /* LIGHTNESS/VALUE */
-        //l = (cmax + cmin) / 2;
-        r_v = cmax;
-
-        /* SATURATION */
-        /*if (delta == 0) {
-        *r_s = 0;
-      } else {
-        *r_s = delta / (1 - fabs (1 - (2 * (l - 1))));
-      }*/
-        if (cmax == 0) {
-            r_s = 0;
-        } else {
-            r_s = delta / cmax;
-        }
-        //debug ("rgb=%d,%d,%d ---> hsv=%f,%f,%f", r, g, b, *r_h, *r_s, *r_v);
-        hsv[0] = r_h;
-        hsv[1] = r_s;
-        hsv[2] = r_v;
-    }
+//        rp = ((float) r) / 255;
+//        gp = ((float) g) / 255;
+//        bp = ((float) b) / 255;
 
 
-//    void hsv_to_rgb (float h, float s, float v, int *r_r, int *r_g, int *r_b) {
-//      if (h > 360)
-//        h -= 360;
-//      if (h < 0)
-//        h += 360;
-//      h = CLAMP (h, 0, 360);
-//      s = CLAMP (s, 0, 1);
-//      v = CLAMP (v, 0, 1);
-//      float c = v * s;
-//      float x = c * (1 - fabsf (fmod ((h / HUE_ANGLE), 2) - 1));
-//      float m = v - c;
-//      float rp, gp, bp;
-//      int a = h / 60;
+//        cmax = rp;
+//        cmaxwhich = 0; /* faster comparison afterwards */
+//        if (gp > cmax) { cmax = gp; cmaxwhich = 1; }
+//        if (bp > cmax) { cmax = bp; cmaxwhich = 2; }
+//        cmin = rp;
+//        cminwhich = 0;
+//        if (gp < cmin) { cmin = gp; cminwhich = 1; }
+//        if (bp < cmin) { cmin = bp; cminwhich = 2; }
 
-//      //debug ("h=%f, a=%d", h, a);
+//        delta = cmax - cmin;
 
-//      switch (a) {
-//        case 0:
-//          rp = c;
-//          gp = x;
-//          bp = 0;
-//        break;
+//        /* HUE */
+//        if (delta == 0) {
+//            r_h = 0;
+//        } else {
+//            switch (cmaxwhich) {
+//            case 0: /* cmax == rp */
+//                r_h = HUE_ANGLE * (fmod ((gp - bp) / delta, 6));
+//                break;
 
-//        case 1:
-//          rp = x;
-//          gp = c;
-//          bp = 0;
-//        break;
+//            case 1: /* cmax == gp */
+//                r_h = HUE_ANGLE * (((bp - rp) / delta) + 2);
+//                break;
 
-//        case 2:
-//          rp = 0;
-//          gp = c;
-//          bp = x;
-//        break;
+//            case 2: /* cmax == bp */
+//                r_h = HUE_ANGLE * (((rp - gp) / delta) + 4);
+//                break;
+//            }
+//            if (r_h < 0)
+//                r_h += 360;
+//        }
 
-//        case 3:
-//          rp = 0;
-//          gp = x;
-//          bp = c;
-//        break;
+//        /* VALUE */
+//        r_v = cmax;
 
-//        case 4:
-//          rp = x;
-//          gp = 0;
-//          bp = c;
-//        break;
+//        /* SATURATION */
+//        if (cmax == 0) {
+//            r_s = 0;
+//        } else {
+//            r_s = delta / cmax;
+//        }
 
-//        default: // case 5:
-//          rp = c;
-//          gp = 0;
-//          bp = x;
-//        break;
-//      }
-
-//      *r_r = (rp + m) * 255;
-//      *r_g = (gp + m) * 255;
-//      *r_b = (bp + m) * 255;
-
-//      //debug ("hsv=%f,%f,%f, ---> rgb=%d,%d,%d", h, s, v, *r_r, *r_g, *r_b);
+//        hsv[0] = r_h;
+//        hsv[1] = r_s;
+//        hsv[2] = r_v;
 //    }
+
 
 
 };

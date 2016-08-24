@@ -737,7 +737,6 @@ main (int argc, char** argv)
   tf::transformTFToEigen(base2kinect.inverse(),k2b_eig);
   tf::transformTFToEigen(base2kinect,b2k_eig);
 
-
   ///-- Creat Visualizer Instance --///
   if (pcl_viz)
     visor = createVis();
