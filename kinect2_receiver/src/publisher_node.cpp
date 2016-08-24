@@ -4,7 +4,7 @@
 int main(int argc, char **argv)
 {
 
-  ros::init(argc, argv, "kinect2_viewer", ros::init_options::AnonymousName);
+  ros::init(argc, argv, "kinect2_publisher", ros::init_options::AnonymousName);
 
   if(!ros::ok())
   {
