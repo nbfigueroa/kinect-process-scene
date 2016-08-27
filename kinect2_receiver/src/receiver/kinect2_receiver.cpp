@@ -46,6 +46,11 @@ void Kinect2_Receiver::start()
 
     std::string topicCameraInfoColor = topicColor.substr(0, topicColor.rfind('/')) + "/camera_info";
     std::string topicCameraInfoDepth = topicDepth.substr(0, topicDepth.rfind('/')) + "/camera_info";
+
+    ROS_INFO_STREAM("topicCameraInfoColor: " << topicCameraInfoColor);
+    ROS_INFO_STREAM("topicCameraInfoDepth: " << topicCameraInfoDepth);
+
+
     cloudFrame = "/" K2_DEFAULT_NS  K2_TF_IR_OPT_FRAME;
 
     // Image Subscribers

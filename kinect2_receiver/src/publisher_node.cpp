@@ -12,9 +12,13 @@ int main(int argc, char **argv)
   }
 
   // Default params
+
   std::string ns = K2_DEFAULT_NS;
+
+  // Real Data
   std::string topicColor = K2_TOPIC_SD K2_TOPIC_IMAGE_COLOR K2_TOPIC_IMAGE_RECT;
   std::string topicDepth = K2_TOPIC_SD K2_TOPIC_IMAGE_DEPTH K2_TOPIC_IMAGE_RECT;
+
   std::string topicCloud = K2_TOPIC_SD;
   bool useCompressed = false;
   bool withViewer    = true;

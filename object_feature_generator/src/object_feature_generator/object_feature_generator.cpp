@@ -48,31 +48,35 @@ void ObjectFeatureGenerator::cloudCallback(const PointCloud_pcl::ConstPtr& cloud
     if (runViz)
         viewObject();
 
-    ///-- Extracting Color Features from Segmented Object--///
-    Eigen::MatrixXd rgb(size,3);
-    pcl::PointXYZRGBNormal point;
-    Eigen::Vector3i rgb_;
-    for (int i=0;i<size;i++){
-        point = cloud->points.at(i);
-        rgb_ = point.getRGBVector3i();
+    if (size > 0){
 
-        rgb(i,0) = (double)rgb_[0]; rgb(i,1) = (double)rgb_[1]; rgb(i,2) = (double)rgb_[2];
+        ///-- Extracting Color Features from Segmented Object--///
+        Eigen::MatrixXd rgb(size,3);
+        pcl::PointXYZRGBNormal point;
+        Eigen::Vector3i rgb_;
+        for (int i=0;i<size;i++){
+            point = cloud->points.at(i);
+            rgb_ = point.getRGBVector3i();
 
+            rgb(i,0) = (double)rgb_[0]; rgb(i,1) = (double)rgb_[1]; rgb(i,2) = (double)rgb_[2];
+
+        }
+
+        // Stats for RGB Channel
+        Eigen::MatrixXd mean_rgb(1,3);
+        mean_rgb = rgb.colwise().mean();
+
+        //-- Compute covariance here
+        Eigen::MatrixXd  centered   = rgb.rowwise() - rgb.colwise().mean();
+        Eigen::MatrixXd covariance = (centered.adjoint() * centered) / double(size - 1);
+        Eigen::MatrixXd std_rgb(1,3);
+        std_rgb << sqrt(covariance.coeff(0,0)) ,  sqrt(covariance.coeff(1,1)) , sqrt(covariance.coeff(2,2));
+
+
+        ///-- Publish Feature Message--///
+        sendFeatures(mean_rgb, std_rgb);
     }
 
-    // Stats for RGB Channel
-    Eigen::MatrixXd mean_rgb(1,3);
-    mean_rgb = rgb.colwise().mean();
-
-    //-- Compute covariance here
-    Eigen::MatrixXd  centered   = rgb.rowwise() - rgb.colwise().mean();
-    Eigen::MatrixXd covariance = (centered.adjoint() * centered) / double(size - 1);
-    Eigen::MatrixXd std_rgb(1,3);
-    std_rgb << sqrt(covariance.coeff(0,0)) ,  sqrt(covariance.coeff(1,1)) , sqrt(covariance.coeff(2,2));
-
-
-    ///-- Publish Feature Message--///
-    sendFeatures(mean_rgb, std_rgb);
 
 }
 

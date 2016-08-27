@@ -412,8 +412,8 @@ void extract_table_object (pcl::PointCloud<pcl::PointXYZRGB>::Ptr& input_cloud_p
     ///
     removeAxisAlignedBB(filtered_cloud_ptr,object_cloud_ptr, tab_minPt, tab_maxPt, true);
     pcl::PointXYZRGB obj_minPt, obj_maxPt;
-    obj_minPt.x = -0.06; obj_minPt.y = -0.06; obj_minPt.z = 0.18;
-    obj_maxPt.x = 0.06;  obj_maxPt.y = 0.06;  obj_maxPt.z = 0.4;
+    obj_minPt.x = -0.06; obj_minPt.y = -0.06; obj_minPt.z = 0.2;
+    obj_maxPt.x = 0.06;  obj_maxPt.y = 0.06;  obj_maxPt.z = 0.45;
     pcl::transformPointCloud(*object_cloud_ptr,*object_cloud_ptr, arm);
     removeAxisAlignedBB(object_cloud_ptr, obj_minPt, obj_maxPt, false);
 
