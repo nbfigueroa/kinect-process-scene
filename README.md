@@ -23,7 +23,9 @@ My own Kinect2_receiver class which processes pre-registered depth and color ima
 ####object_feature_generator
 Extracts and streams default object features (from segmented point cloud)
 - mean & std of r,g,b values (as a wrench message)
+
 ---
+
 ###Bimanual Peeling Zucchini Segmentor Instructios
 
 ####On lasapc18
