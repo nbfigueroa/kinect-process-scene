@@ -41,7 +41,7 @@ Run Zucchini segmentation node (publishes zucchini and cutting board point cloud
 ```
 $ roslaunch process_table_scene bimanual_scene.launch
 ```
-Generate Object Features Online (Publishes Zucchini Color Features):
+Generate Object Features Online (Publishes Observed Zucchini Color Features):
 ```
 $ rosrun object_feature_generator feature_generator_node
 ```
