@@ -11,7 +11,7 @@ ObjectFeatureGenerator::ObjectFeatureGenerator (const std::string cloudTopic, co
         visualizer = viewer;
         visualizer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, cloud_topic);
         visualizer->initCameraParameters();
-        visualizer->setBackgroundColor(0, 0, 0);
+        visualizer->setBackgroundColor(1, 1, 1);
         visualizer->setSize(200, 200);
         visualizer->setShowFPS(true);
         visualizer->setCameraPosition(0, 0, 0, 0, -1, 0);
