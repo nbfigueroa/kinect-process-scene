@@ -4,7 +4,7 @@
 
 Kinect2_Receiver::Kinect2_Receiver(const std::string &topicColor, const std::string &topicDepth, const bool useCompressed)
     : topicColor(topicColor), topicDepth(topicDepth), useCompressed(useCompressed),
-      updateCloud(false), running(false), frame(0), queueSize(5),
+      updateCloud(false), running(false), frame(0), queueSize(100),
       nh("~"), spinner(0), it(nh)
 {
     cameraMatrixColor = cv::Mat::zeros(3, 3, CV_64F);
@@ -72,6 +72,7 @@ void Kinect2_Receiver::start()
     std::chrono::milliseconds duration(1);
     while(!updateCloud)
     {
+        //ROS_INFO("NOT UPDATING");
         if(!ros::ok())
         {
             return;
@@ -109,7 +110,8 @@ void Kinect2_Receiver::stop()
 void Kinect2_Receiver::callback(const sensor_msgs::Image::ConstPtr imageColor, const sensor_msgs::Image::ConstPtr imageDepth,
               const sensor_msgs::CameraInfo::ConstPtr cameraInfoColor, const sensor_msgs::CameraInfo::ConstPtr cameraInfoDepth)
 {
-  cv::Mat color, depth;
+    ROS_INFO("Receive data");
+    cv::Mat color, depth;
 
   readCameraInfo(cameraInfoColor, cameraMatrixColor);
   readCameraInfo(cameraInfoDepth, cameraMatrixDepth);
@@ -134,6 +136,7 @@ void Kinect2_Receiver::callback(const sensor_msgs::Image::ConstPtr imageColor, c
 
 void Kinect2_Receiver::generateCloud()
 {
+//    ROS_INFO("Generating Cloud");
     cv::Mat color, depth;
     lock.lock();
     color = this->color;
@@ -141,6 +144,7 @@ void Kinect2_Receiver::generateCloud()
     updateCloud = false;
     lock.unlock();
     createCloud(depth, color, cloud);
+//    ROS_INFO("Generated Cloud");
 }
 
 void Kinect2_Receiver::sendCloud()
@@ -173,10 +177,15 @@ void Kinect2_Receiver::cloudViewer()
     {
       generateCloud();
 
+//      ROS_INFO("Updating point cloud...");
       visualizer->updatePointCloud(cloud, cloudName);
+//      ROS_INFO("Updated Cloud");
 
-      if(publishCloud)
+      if(publishCloud) {
+//        ROS_INFO("Publishing Cloud");
         sendCloud();
+//        ROS_INFO("Published Cloud");
+      }
     }
 
     visualizer->spinOnce(10);
